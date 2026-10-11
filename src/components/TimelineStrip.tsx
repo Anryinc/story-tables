@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import type { ScenarioDocument, TimelineMarker } from "@/lib/scenario/types";
 
 const MAX_ROUNDS = 24;
@@ -64,7 +64,12 @@ export function TimelineStrip({
       >
         <p
           className="brass"
-          style={{ fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase", margin: 0 }}
+          style={{
+            fontSize: 11,
+            letterSpacing: "0.16em",
+            textTransform: "uppercase",
+            margin: 0,
+          }}
         >
           Шкала ходов
         </p>
@@ -72,21 +77,15 @@ export function TimelineStrip({
           type="button"
           className="btn"
           style={{ height: 28, fontSize: 11 }}
-          onClick={() => addAt(Math.min(MAX_ROUNDS, (markers.at(-1)?.atRound ?? 0) + 1 || 1))}
+          onClick={() =>
+            addAt(Math.min(MAX_ROUNDS, (markers.at(-1)?.atRound ?? 0) + 1 || 1))
+          }
         >
           + Событие
         </button>
       </div>
 
-      <div
-        style={{
-          display: "flex",
-          gap: 0,
-          overflowX: "auto",
-          paddingBottom: 4,
-          position: "relative",
-        }}
-      >
+      <div style={{ display: "flex", overflowX: "auto", paddingBottom: 4 }}>
         {Array.from({ length: MAX_ROUNDS }, (_, i) => i + 1).map((round) => {
           const here = markers.filter((m) => m.atRound === round);
           return (
@@ -96,7 +95,6 @@ export function TimelineStrip({
                 minWidth: 44,
                 flex: "0 0 44px",
                 textAlign: "center",
-                position: "relative",
               }}
             >
               <button
@@ -199,7 +197,6 @@ export function TimelineStrip({
             >
               <option value="all">Все игроки</option>
               <option value="same_location">В выбранной локации</option>
-              <option value="actor">(legacy) actor</option>
             </select>
           </label>
           {selected.scope === "same_location" ? (
@@ -254,7 +251,7 @@ export function TimelineStrip({
   );
 }
 
-const field: React.CSSProperties = {
+const field: CSSProperties = {
   display: "block",
   width: "100%",
   marginTop: 4,

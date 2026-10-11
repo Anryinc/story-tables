@@ -94,7 +94,8 @@ export class TurnEngine {
 
   ensureSeat(clientId: string, displayName = "Игрок") {
     if (this.seats.some((s) => s.clientId === clientId)) return { ok: true as const };
-    if (this.seats.length >= MAX_PARTY + 1) return { ok: false as const, error: "Стол полон" };
+    if (this.seats.length >= MAX_PARTY + 1)
+      return { ok: false as const, error: "Стол полон" };
     this.seats.push({ clientId, displayName, characterId: null });
     this.emit();
     return { ok: true as const };
@@ -106,7 +107,11 @@ export class TurnEngine {
     if (!seat) return { ok: false as const, error: "Нет места" };
     if (characterId) {
       if (!ROSTER_BY_ID[characterId]) return { ok: false as const, error: "Нет роли" };
-      if (this.seats.some((s) => s.characterId === characterId && s.clientId !== clientId))
+      if (
+        this.seats.some(
+          (s) => s.characterId === characterId && s.clientId !== clientId,
+        )
+      )
         return { ok: false as const, error: "Занято" };
       if (!seat.characterId && this.players().length >= MAX_PARTY)
         return { ok: false as const, error: "Максимум игроков" };
@@ -121,7 +126,8 @@ export class TurnEngine {
   }
 
   start(clientId: string) {
-    if (clientId !== this.hostClientId) return { ok: false as const, error: "Только хост" };
+    if (clientId !== this.hostClientId)
+      return { ok: false as const, error: "Только хост" };
     const players = this.players();
     if (!players.length) return { ok: false as const, error: "Нужна роль" };
     const start = this.graph.startLocationId;
@@ -151,11 +157,14 @@ export class TurnEngine {
     if (this.phase !== "planning") return { ok: false as const, error: "Нельзя" };
     const seat = this.seats.find((s) => s.clientId === clientId);
     if (!seat?.characterId) return { ok: false as const, error: "Нужна роль" };
-    const ok = this.actionsFor(clientId).some((a) => intentKey(a.intent) === intentKey(intent));
+    const ok = this.actionsFor(clientId).some(
+      (a) => intentKey(a.intent) === intentKey(intent),
+    );
     if (!ok) return { ok: false as const, error: "Действие недоступно" };
     this.intents.set(clientId, intent);
     this.emit();
-    if (this.players().every((s) => this.intents.has(s.clientId))) this.resolveRound();
+    if (this.players().every((s) => this.intents.has(s.clientId)))
+      this.resolveRound();
     return { ok: true as const };
   }
 
@@ -194,16 +203,10 @@ export class TurnEngine {
 
   private pushPopup(clientId: string, title: string, body: string, round: number) {
     const list = this.popupsOf.get(clientId) ?? [];
-    list.push({
-      id: newId(),
-      title,
-      body,
-      round,
-    });
+    list.push({ id: newId(), title, body, round });
     this.popupsOf.set(clientId, list);
   }
 
-  /** Timeline → personal phone popups (NOT share board). */
   private fireTimelineForRound(round: number) {
     if (this.firedTimelineRounds.has(round)) return;
     const rules = this.timeline.filter((r) => r.atRound === round);
@@ -216,7 +219,13 @@ export class TurnEngine {
         this.flags[`unlock_${rule.unlockLocationId}`] = true;
       }
 
-      const targets = this.players();
+      let targets = this.players();
+      if (rule.scope === "same_location" && rule.scopeLocationId) {
+        targets = targets.filter(
+          (s) => this.locationOf.get(s.clientId) === rule.scopeLocationId,
+        );
+      }
+
       for (const s of targets) {
         this.pushJournal(s.clientId, rule.title || `Ход ${round}`, rule.body || "");
         if (rule.grantClue) this.addClue(s.clientId, rule.grantClue);
@@ -227,7 +236,7 @@ export class TurnEngine {
           round,
         );
       }
-      this.lastPublicEvent = `Раунд ${round}: событие сценария (у игроков на телефонах)`;
+      this.lastPublicEvent = `Раунд ${round}: событие сценария`;
     }
   }
 
@@ -238,7 +247,11 @@ export class TurnEngine {
       if (intent?.type !== "move") continue;
       const loc = this.locationOf.get(s.clientId);
       if (!loc) continue;
-      if (availableExits(this.graph, loc, this.flags).some((e) => e.to === intent.toLocationId)) {
+      if (
+        availableExits(this.graph, loc, this.flags).some(
+          (e) => e.to === intent.toLocationId,
+        )
+      ) {
         this.locationOf.set(s.clientId, intent.toLocationId);
         const name = locationName(this.graph, intent.toLocationId);
         this.pushJournal(s.clientId, "Перемещение", name);
@@ -271,7 +284,9 @@ export class TurnEngine {
     const loc = this.locationOf.get(clientId);
     if (!loc) return;
     const seen = this.inspected.get(clientId) ?? new Set();
-    const t = availableInspect(this.graph, loc, this.flags, seen).find((x) => x.id === targetId);
+    const t = availableInspect(this.graph, loc, this.flags, seen).find(
+      (x) => x.id === targetId,
+    );
     if (!t) {
       this.lastResultOf.set(clientId, "Нечего осматривать.");
       return;
@@ -290,7 +305,9 @@ export class TurnEngine {
     const npc = availableNpcs(this.graph, loc, this.flags).find((n) => n.id === npcId);
     if (!npc) return;
     const used = this.talkUsed.get(clientId) ?? new Set();
-    const opt = availableTalkOptions(npc, this.flags, used).find((o) => o.id === optionId);
+    const opt = availableTalkOptions(npc, this.flags, used).find(
+      (o) => o.id === optionId,
+    );
     if (!opt) return;
     used.add(`${npc.id}:${opt.id}`);
     this.talkUsed.set(clientId, used);
@@ -305,7 +322,8 @@ export class TurnEngine {
     if (!clue) return;
     const loc = this.locationOf.get(clientId) ?? this.graph.startLocationId;
     const locName = locationName(this.graph, loc);
-    const fromName = this.seats.find((s) => s.clientId === clientId)?.displayName ?? "Игрок";
+    const fromName =
+      this.seats.find((s) => s.clientId === clientId)?.displayName ?? "Игрок";
     this.shareBoard = [
       {
         id: newId(),
@@ -389,7 +407,9 @@ export class TurnEngine {
     const loc = this.locationOf.get(clientId) ?? null;
     const players = this.players();
     const hereWith = players
-      .filter((s) => s.clientId !== clientId && this.locationOf.get(s.clientId) === loc)
+      .filter(
+        (s) => s.clientId !== clientId && this.locationOf.get(s.clientId) === loc,
+      )
       .map((s) => s.displayName);
     const hereNpcs = loc
       ? availableNpcs(this.graph, loc, this.flags).map((n) => ({
@@ -408,7 +428,9 @@ export class TurnEngine {
       round: this.round,
       seats: this.seats.map((s) => ({ ...s })),
       myCharacterId: seat?.characterId ?? null,
-      takenCharacterIds: this.seats.map((s) => s.characterId).filter(Boolean) as string[],
+      takenCharacterIds: this.seats
+        .map((s) => s.characterId)
+        .filter(Boolean) as string[],
       myLocationId: loc,
       myLocationName: loc ? locationName(this.graph, loc) : null,
       myLocationImage: loc ? this.graph.locations[loc]?.image ?? null : null,
