@@ -22,11 +22,6 @@ import type {
   TurnSnapshot,
 } from "./turn-types";
 
-// re-export find from registry path fix
-function getBase(id?: string) {
-  return getLoreBase(id);
-}
-
 function intentKey(i: ActionIntent): string {
   switch (i.type) {
     case "wait":
@@ -168,7 +163,10 @@ export class TurnEngine {
     const players = this.players();
     if (!players.length) return { ok: false as const, error: "Нужна роль" };
     if (!this.characters.length)
-      return { ok: false as const, error: "В сценарии нет персонажей — создайте во вкладке Персонажи" };
+      return {
+        ok: false as const,
+        error: "В сценарии нет персонажей — вкладка Персонажи",
+      };
     const start = this.graph.startLocationId;
     if (!this.graph.locations[start]) {
       return { ok: false as const, error: "В графе нет стартовой локации" };
@@ -255,7 +253,6 @@ export class TurnEngine {
 
     for (const rule of rules) {
       if (rule.requiresAbilityUsed && !this.flags[rule.requiresAbilityUsed]) continue;
-      // requiresAbilityId: any player has it — soft check via flags only in v1
 
       this.setFlags(rule.setFlags);
       if (rule.unlockLocationId) {
@@ -320,9 +317,8 @@ export class TurnEngine {
     this.intents.clear();
     const closed = this.round;
     this.round += 1;
-    // tick cooldowns
     for (const [, map] of this.abilityCooldown) {
-      for (const [aid, until] of map) {
+      for (const [aid, until] of [...map.entries()]) {
         if (until < this.round) map.delete(aid);
       }
     }
@@ -336,7 +332,7 @@ export class TurnEngine {
     if (!seat?.characterId) return;
     const ch = this.charById(seat.characterId);
     if (!ch?.lore) return;
-    const base = getBase(ch.lore.baseId || this.loreBaseId);
+    const base = getLoreBase(ch.lore.baseId || this.loreBaseId);
     if (!base) return;
     const ab = findAbility(base, abilityId);
     if (!ab) return;
@@ -493,14 +489,13 @@ export class TurnEngine {
         id: `share:${c.id}`,
         intent: { type: "share", clueId: c.id },
         label: `Показать здесь: ${c.title}`,
-        detail: "Тратит ход. Улика — только у кого та же локация.",
+        detail: "Тратит ход.",
       });
     }
 
-    // abilities
     const ch = this.charById(seat.characterId);
     if (ch?.lore) {
-      const base = getBase(ch.lore.baseId || this.loreBaseId);
+      const base = getLoreBase(ch.lore.baseId || this.loreBaseId);
       const ids = ch.lore.enabledAbilityIds ?? [];
       const cdMap = this.abilityCooldown.get(clientId) ?? new Map();
       for (const aid of ids) {
