@@ -5,7 +5,6 @@ import { PopupModal } from "@/components/PopupModal";
 import { getClientId } from "@/lib/ids";
 import { openGuestPeer, type GuestMsg } from "@/lib/p2p";
 import type { ActionIntent, TurnSnapshot } from "@/lib/turn-types";
-import { ROSTER } from "@/projects/roster";
 
 export function PlayPage() {
   const { code = "" } = useParams();
@@ -136,6 +135,8 @@ export function PlayPage() {
     );
   }
 
+  const roles = room.characterOptions ?? [];
+
   return (
     <>
       {topPopup ? (
@@ -156,37 +157,43 @@ export function PlayPage() {
             Стол {room.code}
           </h1>
           <p className="muted">Выберите роль</p>
-          <div style={{ display: "grid", gap: 8 }}>
-            {ROSTER.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className="btn"
-                disabled={
-                  room.takenCharacterIds.includes(c.id) && room.myCharacterId !== c.id
-                }
-                onClick={() =>
-                  send({
-                    t: "claim",
-                    clientId,
-                    characterId: room.myCharacterId === c.id ? null : c.id,
-                  })
-                }
-                style={{
-                  textAlign: "left",
-                  height: "auto",
-                  padding: "12px 14px",
-                  borderColor:
-                    room.myCharacterId === c.id ? "var(--paper)" : "var(--line)",
-                }}
-              >
-                <div style={{ color: "var(--paper)" }}>{c.name}</div>
-                <div className="faint" style={{ fontSize: 12 }}>
-                  {c.pathway} · {c.blurb}
-                </div>
-              </button>
-            ))}
-          </div>
+          {roles.length === 0 ? (
+            <p className="danger">Нет персонажей в сценарии.</p>
+          ) : (
+            <div style={{ display: "grid", gap: 8 }}>
+              {roles.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="btn"
+                  disabled={
+                    room.takenCharacterIds.includes(c.id) &&
+                    room.myCharacterId !== c.id
+                  }
+                  onClick={() =>
+                    send({
+                      t: "claim",
+                      clientId,
+                      characterId: room.myCharacterId === c.id ? null : c.id,
+                    })
+                  }
+                  style={{
+                    textAlign: "left",
+                    height: "auto",
+                    padding: "12px 14px",
+                    borderColor:
+                      room.myCharacterId === c.id ? "var(--paper)" : "var(--line)",
+                  }}
+                >
+                  <div style={{ color: "var(--paper)" }}>{c.name}</div>
+                  <div className="faint" style={{ fontSize: 12 }}>
+                    {c.pathway ? `${c.pathway} · ` : ""}
+                    {c.blurb}
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
           {room.myCharacterId ? (
             <p className="muted" style={{ marginTop: 16 }}>
               Ждём «Начать дело» на ПК.
