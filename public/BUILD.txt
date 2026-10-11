@@ -1,3 +1,3 @@
 story-tables
-stamp: runtime-v0.3.0
-compile+timeline S2-S3
+stamp: cherwood-studio-v0.3.1
+Cherwood as ScenarioDocument nodes

@@ -7,9 +7,10 @@ import {
   listStoredScenarios,
   saveScenario,
 } from "@/lib/scenario/store";
+import { seedCherwoodToStudio } from "@/lib/scenario/seed";
 import { listProjects } from "@/projects/registry";
 
-const STAMP = "studio-v0.2.0";
+const STAMP = "cherwood-studio-v0.3.1";
 
 export function HubPage() {
   const navigate = useNavigate();
@@ -21,6 +22,12 @@ export function HubPage() {
     const doc = emptyScenario("Новый сценарий");
     saveScenario(doc);
     navigate(`/studio/${doc.manifest.id}`);
+  };
+
+  const openCherwoodStudio = (force: boolean) => {
+    seedCherwoodToStudio(force);
+    setTick((t) => t + 1);
+    navigate("/studio/cherwood");
   };
 
   const onImport = async (file: File) => {
@@ -55,13 +62,24 @@ export function HubPage() {
             Сценарии
           </h1>
           <p className="muted" style={{ maxWidth: 520, fontSize: 14 }}>
-            Создавайте граф локаций, событий и шкалу ходов. Затем откройте стол на
-            ПК — игроки ходят с телефонов по одному действию за раунд.
+            Червуд перенесён в node-граф. Откройте его в мастерской или создайте
+            свой сценарий.
           </p>
         </div>
         <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
           <button type="button" className="btn btn-primary" onClick={createNew}>
             + Новый сценарий
+          </button>
+          <button type="button" className="btn" onClick={() => openCherwoodStudio(false)}>
+            Червуд в мастерской
+          </button>
+          <button
+            type="button"
+            className="btn"
+            title="Перезаписать localStorage каноном из кода"
+            onClick={() => openCherwoodStudio(true)}
+          >
+            Сбросить Червуд
           </button>
           <label className="btn" style={{ cursor: "pointer" }}>
             Import JSON
@@ -91,7 +109,7 @@ export function HubPage() {
       </h2>
       {stored.length === 0 ? (
         <p className="muted" style={{ marginTop: 12 }}>
-          Пока пусто. Создайте сценарий в node-мастерской.
+          Пока пусто — нажмите «Червуд в мастерской» или создайте новый.
         </p>
       ) : (
         <div
@@ -111,8 +129,7 @@ export function HubPage() {
                 {s.manifest.title}
               </h3>
               <p className="faint" style={{ fontSize: 12 }}>
-                {s.nodes.length} нод · {s.edges.length} связей ·{" "}
-                {s.manifest.status}
+                {s.nodes.length} нод · {s.edges.length} связей · {s.manifest.status}
               </p>
               <p className="muted" style={{ fontSize: 13 }}>
                 {s.manifest.blurb}
@@ -121,13 +138,7 @@ export function HubPage() {
                 <Link className="btn btn-primary" to={`/studio/${s.manifest.id}`}>
                   Редактировать
                 </Link>
-                <Link
-                  className="btn"
-                  to={`/project/${s.manifest.id}`}
-                  onClick={() =>
-                    sessionStorage.setItem("story-tables.project", s.manifest.id)
-                  }
-                >
+                <Link className="btn" to={`/project/${s.manifest.id}`}>
                   Играть
                 </Link>
                 <button
@@ -158,7 +169,7 @@ export function HubPage() {
           marginTop: 40,
         }}
       >
-        Встроенные (временно, до пересборки в мастерской)
+        Быстрый старт (play без localStorage)
       </h2>
       <div
         style={{
@@ -169,12 +180,7 @@ export function HubPage() {
         }}
       >
         {bundled.map((p) => (
-          <Link
-            key={p.id}
-            to={`/project/${p.id}`}
-            className="card"
-            style={{ overflow: "hidden", padding: 0 }}
-          >
+          <div key={p.id} className="card" style={{ overflow: "hidden", padding: 0 }}>
             <div style={{ aspectRatio: "16/10", overflow: "hidden" }}>
               <img
                 src={p.coverImage}
@@ -192,13 +198,25 @@ export function HubPage() {
               <p className="muted" style={{ fontSize: 13 }}>
                 {p.blurb}
               </p>
+              <div style={{ display: "flex", gap: 8, marginTop: 10, flexWrap: "wrap" }}>
+                <Link className="btn btn-primary" to={`/project/${p.id}`}>
+                  Играть
+                </Link>
+                <button
+                  type="button"
+                  className="btn"
+                  onClick={() => openCherwoodStudio(false)}
+                >
+                  В мастерской
+                </button>
+              </div>
             </div>
-          </Link>
+          </div>
         ))}
       </div>
 
       <p className="faint" style={{ marginTop: 32, fontSize: 12 }}>
-        Build: {STAMP} · story-tables
+        Build: {STAMP}
       </p>
     </main>
   );
