@@ -31,6 +31,8 @@ export type SequenceDef = {
   rank: 9 | 8 | 7 | 6 | 5 | 4;
   nameRu: string;
   nameEn: string;
+  /** Short potion / sequence blurb for character card */
+  profileRu: string;
   potionSummaryRu?: string;
   actingPrincipleRu?: string;
   abilities: AbilityDef[];
@@ -76,4 +78,13 @@ export function findAbility(base: LoreBase, abilityId: string): AbilityDef | nul
     }
   }
   return null;
+}
+
+export function findSequence(
+  base: LoreBase,
+  pathwayId: string,
+  rank: number,
+): SequenceDef | null {
+  const path = base.pathways.find((p) => p.id === pathwayId);
+  return path?.sequences.find((s) => s.rank === rank) ?? null;
 }
