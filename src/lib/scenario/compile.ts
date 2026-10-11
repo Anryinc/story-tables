@@ -1,7 +1,7 @@
 /** Compile Studio ScenarioDocument → playable GraphDocument + timeline rules. */
 
 import type { GraphDocument, GraphLocation, GraphNpc, GraphInspectable } from "@/lib/graph/types";
-import type { ScenarioDocument, ScenarioNode } from "./types";
+import type { ScenarioCharacter, ScenarioDocument, ScenarioNode } from "./types";
 
 export type TimelineRule = {
   atRound: number;
@@ -12,6 +12,8 @@ export type TimelineRule = {
   setFlags?: string[];
   grantClue?: { id: string; title: string; body: string; source: string };
   unlockLocationId?: string;
+  requiresAbilityId?: string;
+  requiresAbilityUsed?: string;
 };
 
 export type CompiledScenario = {
@@ -19,6 +21,9 @@ export type CompiledScenario = {
   timeline: TimelineRule[];
   title: string;
   projectId: string;
+  characters: ScenarioCharacter[];
+  loreBaseId?: string;
+  playersMax: number;
 };
 
 function locIdOf(n: ScenarioNode): string {
@@ -128,7 +133,6 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
 
   const timeline: TimelineRule[] = [];
 
-  // Primary: timeline ruler markers
   for (const m of doc.timeline ?? []) {
     timeline.push({
       atRound: m.atRound,
@@ -139,10 +143,11 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
       setFlags: m.setFlags,
       grantClue: m.grantClue,
       unlockLocationId: m.unlockLocationId,
+      requiresAbilityId: m.requiresAbilityId,
+      requiresAbilityUsed: m.requiresAbilityUsed,
     });
   }
 
-  // Legacy: timeline nodes on graph
   for (const n of doc.nodes) {
     if (n.kind !== "timeline") continue;
     const atRound = n.data.atRound ?? 1;
@@ -157,6 +162,8 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
         setFlags: n.data.setFlags,
         grantClue: n.data.grantClue,
         unlockLocationId: n.data.unlockLocationId,
+        requiresAbilityId: n.data.requiresAbilityId,
+        requiresAbilityUsed: n.data.requiresAbilityUsed,
       });
       continue;
     }
@@ -172,14 +179,21 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
         setFlags: ev.data.setFlags ?? n.data.setFlags,
         grantClue: ev.data.grantClue ?? n.data.grantClue,
         unlockLocationId: ev.data.unlockLocationId ?? n.data.unlockLocationId,
+        requiresAbilityId: ev.data.requiresAbilityId ?? n.data.requiresAbilityId,
+        requiresAbilityUsed: ev.data.requiresAbilityUsed ?? n.data.requiresAbilityUsed,
       });
     }
   }
+
+  const characters = doc.characters ?? [];
 
   return {
     projectId: doc.manifest.id,
     title: doc.manifest.title,
     graph: { version: 1, startLocationId, locations },
     timeline,
+    characters,
+    loreBaseId: doc.loreBaseId,
+    playersMax: doc.manifest.playersMax || Math.max(4, characters.length),
   };
 }
