@@ -16,6 +16,15 @@ import {
 const NW = 200;
 const NH = 96;
 
+const PLAN_KINDS: NodeKind[] = [
+  "start",
+  "location",
+  "event",
+  "branch",
+  "npc",
+  "inspect",
+];
+
 type Drag =
   | { mode: "node"; id: string; ox: number; oy: number }
   | { mode: "pan"; ox: number; oy: number; vx: number; vy: number }
@@ -25,16 +34,23 @@ type Drag =
 export function NodeCanvas({
   doc,
   onChange,
+  hideTimelineNodes = false,
 }: {
   doc: ScenarioDocument;
   onChange: (d: ScenarioDocument) => void;
+  hideTimelineNodes?: boolean;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState({ x: 40, y: 40, scale: 1 });
   const drag = useRef<Drag>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
+  const visibleNodes = hideTimelineNodes
+    ? doc.nodes.filter((n) => n.kind !== "timeline")
+    : doc.nodes;
+
   const selected = doc.nodes.find((n) => n.id === selectedId) ?? null;
+  const locations = doc.nodes.filter((n) => n.kind === "location");
 
   const updateNode = useCallback(
     (id: string, patch: Partial<ScenarioNode> | { data: Partial<ScenarioNode["data"]> }) => {
@@ -110,7 +126,6 @@ export function NodeCanvas({
         x: (e.clientX - rect.left - view.x) / view.scale,
         y: (e.clientY - rect.top - view.y) / view.scale,
       };
-      // force repaint
       setView((v) => ({ ...v }));
     }
   };
@@ -164,10 +179,7 @@ export function NodeCanvas({
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
 
-  const linkPreview =
-    drag.current?.mode === "link"
-      ? drag.current
-      : null;
+  const linkPreview = drag.current?.mode === "link" ? drag.current : null;
 
   return (
     <div style={{ display: "flex", height: "100%", minHeight: 0 }}>
@@ -179,7 +191,6 @@ export function NodeCanvas({
           overflow: "hidden",
           background:
             "radial-gradient(circle at 1px 1px, #2a2622 1px, transparent 0) 0 0 / 24px 24px",
-          cursor: drag.current?.mode === "pan" ? "grabbing" : "default",
         }}
         onPointerDown={onBoardDown}
         onPointerMove={onMove}
@@ -197,7 +208,7 @@ export function NodeCanvas({
             maxWidth: "70%",
           }}
         >
-          {(Object.keys(NODE_META) as NodeKind[]).map((k) => (
+          {PLAN_KINDS.map((k) => (
             <button
               key={k}
               type="button"
@@ -226,8 +237,8 @@ export function NodeCanvas({
         >
           <g transform={`translate(${view.x},${view.y}) scale(${view.scale})`}>
             {doc.edges.map((e) => {
-              const a = doc.nodes.find((n) => n.id === e.from);
-              const b = doc.nodes.find((n) => n.id === e.to);
+              const a = visibleNodes.find((n) => n.id === e.from);
+              const b = visibleNodes.find((n) => n.id === e.to);
               if (!a || !b) return null;
               const x1 = a.x + NW;
               const y1 = a.y + NH / 2;
@@ -246,12 +257,9 @@ export function NodeCanvas({
             })}
             {linkPreview ? (
               <line
-                x1={
-                  (doc.nodes.find((n) => n.id === linkPreview.from)?.x ?? 0) + NW
-                }
+                x1={(doc.nodes.find((n) => n.id === linkPreview.from)?.x ?? 0) + NW}
                 y1={
-                  (doc.nodes.find((n) => n.id === linkPreview.from)?.y ?? 0) +
-                  NH / 2
+                  (doc.nodes.find((n) => n.id === linkPreview.from)?.y ?? 0) + NH / 2
                 }
                 x2={linkPreview.x}
                 y2={linkPreview.y}
@@ -272,7 +280,7 @@ export function NodeCanvas({
             transformOrigin: "0 0",
           }}
         >
-          {doc.nodes.map((n) => {
+          {visibleNodes.map((n) => {
             const meta = NODE_META[n.kind];
             const sel = n.id === selectedId;
             return (
@@ -308,11 +316,6 @@ export function NodeCanvas({
                 </div>
                 <div style={{ padding: "8px 10px", color: "var(--paper)", fontSize: 14 }}>
                   {n.data.title}
-                  {n.kind === "timeline" && n.data.atRound != null ? (
-                    <div className="faint" style={{ fontSize: 11 }}>
-                      раунд {n.data.atRound}
-                    </div>
-                  ) : null}
                   {n.kind === "event" ? (
                     <div className="faint" style={{ fontSize: 11 }}>
                       {n.data.scope ?? "actor"}
@@ -380,8 +383,8 @@ export function NodeCanvas({
       >
         {!selected ? (
           <p className="muted" style={{ fontSize: 13 }}>
-            Выберите ноду или добавьте локацию / событие / «Ход N» (timeline).
-            Тяните за выходной порт → вход другой ноды.
+            План локаций и связей. События по ходам — на шкале сверху. Превью
+            сцены — кнопка в шапке.
           </p>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
@@ -425,50 +428,59 @@ export function NodeCanvas({
             {selected.kind === "event" ? (
               <>
                 <Field
-                  label="Текст события"
+                  label="Текст"
                   value={selected.data.body ?? ""}
                   multiline
                   onChange={(v) => updateNode(selected.id, { data: { body: v } })}
                 />
                 <label className="muted" style={{ fontSize: 12 }}>
-                  Scope
+                  Кому
                   <select
                     value={selected.data.scope ?? "actor"}
                     onChange={(e) =>
                       updateNode(selected.id, {
                         data: {
-                          scope: e.target.value as "actor" | "same_location" | "all",
+                          scope: e.target.value as
+                            | "actor"
+                            | "same_location"
+                            | "all",
                         },
                       })
                     }
-                    style={{
-                      display: "block",
-                      width: "100%",
-                      marginTop: 4,
-                      background: "#0c0b0a",
-                      color: "var(--paper)",
-                      border: "1px solid var(--line)",
-                      borderRadius: 8,
-                      padding: 8,
-                    }}
+                    style={selectStyle}
                   >
-                    <option value="actor">Только автор действия</option>
-                    <option value="same_location">Та же локация</option>
-                    <option value="all">Все игроки</option>
+                    <option value="actor">Автор действия</option>
+                    <option value="same_location">Выбранная локация</option>
+                    <option value="all">Все</option>
                   </select>
                 </label>
+                {selected.data.scope === "same_location" ? (
+                  <label className="muted" style={{ fontSize: 12 }}>
+                    Локация
+                    <select
+                      value={selected.data.scopeLocationId ?? ""}
+                      onChange={(e) =>
+                        updateNode(selected.id, {
+                          data: {
+                            scopeLocationId: e.target.value || undefined,
+                          },
+                        })
+                      }
+                      style={selectStyle}
+                    >
+                      <option value="">—</option>
+                      {locations.map((l) => (
+                        <option
+                          key={l.id}
+                          value={l.data.locationId || l.id}
+                        >
+                          {l.data.title}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
               </>
-            ) : null}
-            {selected.kind === "timeline" ? (
-              <Field
-                label="Срабатывает на раунде"
-                value={String(selected.data.atRound ?? 1)}
-                onChange={(v) =>
-                  updateNode(selected.id, {
-                    data: { atRound: Number(v) || 1 },
-                  })
-                }
-              />
             ) : null}
             {selected.kind === "inspect" ? (
               <>
@@ -519,6 +531,17 @@ export function NodeCanvas({
     </div>
   );
 }
+
+const selectStyle: React.CSSProperties = {
+  display: "block",
+  width: "100%",
+  marginTop: 4,
+  background: "#0c0b0a",
+  color: "var(--paper)",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  padding: 8,
+};
 
 function Field({
   label,
