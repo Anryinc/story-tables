@@ -33,18 +33,18 @@ export type SceneObject = {
   interaction?: "none" | "inspect" | "talk";
 };
 
-/** Marker on the top timeline ruler (preferred over timeline nodes). */
 export type TimelineMarker = {
   id: string;
   atRound: number;
   title: string;
   body: string;
   scope: EventScope;
-  /** For scope=same_location — which locationId gets the popup */
   scopeLocationId?: string;
   setFlags?: string[];
   grantClue?: { id: string; title: string; body: string; source: string; imageUrl?: string };
   unlockLocationId?: string;
+  requiresAbilityId?: string;
+  requiresAbilityUsed?: string;
 };
 
 export type ScenarioNodeData = {
@@ -56,7 +56,6 @@ export type ScenarioNodeData = {
   sceneObjects?: SceneObject[];
   body?: string;
   scope?: EventScope;
-  /** Location for same_location scope */
   scopeLocationId?: string;
   setFlags?: string[];
   grantClue?: { id: string; title: string; body: string; source: string; imageUrl?: string };
@@ -72,6 +71,8 @@ export type ScenarioNodeData = {
   portraitAssetId?: string;
   soundUrl?: string;
   soundAssetId?: string;
+  requiresAbilityId?: string;
+  requiresAbilityUsed?: string;
 };
 
 export type ScenarioNode = {
@@ -105,6 +106,21 @@ export type ScenarioManifest = {
   updatedAt: string;
 };
 
+/** Playable role defined in Studio → Characters tab. */
+export type ScenarioCharacter = {
+  id: string;
+  name: string;
+  blurb: string;
+  portraitUrl?: string;
+  portraitAssetId?: string;
+  lore?: {
+    baseId: string;
+    pathwayId: string;
+    sequenceRank: 9 | 8 | 7 | 6 | 5 | 4;
+    enabledAbilityIds?: string[];
+  };
+};
+
 export type ScenarioDocument = {
   version: 1;
   manifest: ScenarioManifest;
@@ -112,22 +128,27 @@ export type ScenarioDocument = {
   edges: ScenarioEdge[];
   initialFlags?: string[];
   assetIds?: string[];
-  /** Top ruler markers — primary timeline source */
   timeline?: TimelineMarker[];
+  /** Active lore pack id (e.g. "lotm") */
+  loreBaseId?: string;
+  /** Roles available at the table */
+  characters?: ScenarioCharacter[];
 };
 
 export const NODE_META: Record<
   NodeKind,
-  { label: string; color: string; defaultPorts: ScenarioPort[] }
+  { label: string; color: string; fill: string; defaultPorts: ScenarioPort[] }
 > = {
   start: {
     label: "Старт",
     color: "#8bc49a",
+    fill: "#1a2e22",
     defaultPorts: [{ id: "out", label: "старт →", dir: "out", kind: "move" }],
   },
   location: {
     label: "Локация",
     color: "#c4a574",
+    fill: "#2a2218",
     defaultPorts: [
       { id: "in", label: "вход", dir: "in", kind: "move" },
       { id: "out", label: "выход", dir: "out", kind: "move" },
@@ -137,6 +158,7 @@ export const NODE_META: Record<
   event: {
     label: "Событие",
     color: "#c77a9a",
+    fill: "#2a1822",
     defaultPorts: [
       { id: "in", label: "вход", dir: "in", kind: "flow" },
       { id: "out", label: "далее", dir: "out", kind: "flow" },
@@ -145,6 +167,7 @@ export const NODE_META: Record<
   branch: {
     label: "Ветка",
     color: "#d4a574",
+    fill: "#2a2418",
     defaultPorts: [
       { id: "in", label: "вход", dir: "in", kind: "flow" },
       { id: "yes", label: "да", dir: "out", kind: "flow" },
@@ -154,11 +177,13 @@ export const NODE_META: Record<
   timeline: {
     label: "Ход N",
     color: "#7aa2c7",
+    fill: "#18222a",
     defaultPorts: [{ id: "out", label: "в раунде →", dir: "out", kind: "flow" }],
   },
   npc: {
     label: "NPC",
     color: "#8bc4b0",
+    fill: "#182a24",
     defaultPorts: [
       { id: "in", label: "в локации", dir: "in", kind: "flow" },
       { id: "out", label: "реплика", dir: "out", kind: "flow" },
@@ -167,6 +192,7 @@ export const NODE_META: Record<
   inspect: {
     label: "Осмотр",
     color: "#9a8bc4",
+    fill: "#22182a",
     defaultPorts: [
       { id: "in", label: "в локации", dir: "in", kind: "flow" },
       { id: "out", label: "результат", dir: "out", kind: "flow" },
@@ -191,6 +217,14 @@ export function createNode(kind: NodeKind, x: number, y: number): ScenarioNode {
       sceneObjects: kind === "location" ? [] : undefined,
     },
     ports: meta.defaultPorts.map((p) => ({ ...p })),
+  };
+}
+
+export function createCharacter(name = "Новый персонаж"): ScenarioCharacter {
+  return {
+    id: `char_${Math.random().toString(36).slice(2, 9)}`,
+    name,
+    blurb: "",
   };
 }
 
@@ -227,6 +261,11 @@ export function emptyScenario(title = "Новый сценарий"): ScenarioDo
       },
     ],
     assetIds: [],
+    loreBaseId: undefined,
+    characters: [
+      createCharacter("Следователь"),
+      createCharacter("Напарник"),
+    ],
     timeline: [
       {
         id: `tm_${Math.random().toString(36).slice(2, 8)}`,
