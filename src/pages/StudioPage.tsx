@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { AssetPanel } from "@/components/AssetPanel";
+import { CharactersPanel } from "@/components/CharactersPanel";
 import { FloatingScene } from "@/components/FloatingScene";
+import { LoreDrawer } from "@/components/LoreDrawer";
 import { NodeCanvas } from "@/components/NodeCanvas";
 import { SceneStage } from "@/components/SceneStage";
 import { TimelineStrip } from "@/components/TimelineStrip";
@@ -12,7 +14,7 @@ import {
 } from "@/lib/scenario/store";
 import type { ScenarioDocument } from "@/lib/scenario/types";
 
-type Tab = "plan" | "scene";
+type Tab = "plan" | "scene" | "characters";
 
 export function StudioPage() {
   const { projectId = "" } = useParams();
@@ -21,7 +23,8 @@ export function StudioPage() {
   const [tab, setTab] = useState<Tab>("plan");
   const [sceneLocId, setSceneLocId] = useState<string | null>(null);
   const [assetsOpen, setAssetsOpen] = useState(false);
-  const [floatScene, setFloatScene] = useState(false);
+  const [loreOpen, setLoreOpen] = useState(false);
+  const [floatSceneLocId, setFloatSceneLocId] = useState<string | null>(null);
 
   useEffect(() => {
     const s = getStoredScenario(projectId);
@@ -73,7 +76,7 @@ export function StudioPage() {
           }
           style={{
             flex: 1,
-            minWidth: 140,
+            minWidth: 120,
             background: "transparent",
             border: "none",
             color: "var(--paper)",
@@ -81,7 +84,7 @@ export function StudioPage() {
             fontSize: 22,
           }}
         />
-        {(["plan", "scene"] as Tab[]).map((t) => (
+        {(["plan", "scene", "characters"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -93,9 +96,24 @@ export function StudioPage() {
             }}
             onClick={() => setTab(t)}
           >
-            {t === "plan" ? "План" : "Сцена"}
+            {t === "plan" ? "План" : t === "scene" ? "Сцена" : "Персонажи"}
           </button>
         ))}
+        {tab === "plan" ? (
+          <button
+            type="button"
+            className="btn"
+            style={{
+              height: 32,
+              fontSize: 12,
+              borderColor: loreOpen ? "var(--brass)" : undefined,
+            }}
+            title="Базы лора и способности"
+            onClick={() => setLoreOpen((v) => !v)}
+          >
+            ✦ Лор
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn"
@@ -104,16 +122,6 @@ export function StudioPage() {
         >
           {assetsOpen ? "◄ Ассеты" : "Ассеты ►"}
         </button>
-        {tab === "plan" ? (
-          <button
-            type="button"
-            className="btn"
-            style={{ height: 32, fontSize: 12 }}
-            onClick={() => setFloatScene((v) => !v)}
-          >
-            {floatScene ? "Закрыть превью" : "Превью сцены"}
-          </button>
-        ) : null}
         <button
           type="button"
           className="btn"
@@ -147,8 +155,19 @@ export function StudioPage() {
           {tab === "plan" ? (
             <>
               <TimelineStrip doc={doc} onChange={onChange} />
-              <div style={{ flex: 1, minHeight: 0 }}>
-                <NodeCanvas doc={doc} onChange={onChange} hideTimelineNodes />
+              <div style={{ flex: 1, minHeight: 0, position: "relative" }}>
+                <LoreDrawer
+                  doc={doc}
+                  onChange={onChange}
+                  open={loreOpen}
+                  onClose={() => setLoreOpen(false)}
+                />
+                <NodeCanvas
+                  doc={doc}
+                  onChange={onChange}
+                  hideTimelineNodes
+                  onOpenScene={(locNodeId) => setFloatSceneLocId(locNodeId)}
+                />
               </div>
             </>
           ) : null}
@@ -217,9 +236,12 @@ export function StudioPage() {
               </div>
             </div>
           ) : null}
+
+          {tab === "characters" ? (
+            <CharactersPanel doc={doc} onChange={onChange} />
+          ) : null}
         </div>
 
-        {/* Slide-out asset library */}
         <aside
           style={{
             width: assetsOpen ? 280 : 0,
@@ -230,36 +252,16 @@ export function StudioPage() {
           }}
         >
           <div style={{ width: 280, height: "100%", padding: 12, overflow: "auto" }}>
-            <AssetPanel
-              categorized
-              onPick={(meta, resolvedUrl) => {
-                if (tab === "scene" && sceneLoc && meta.kind === "image") {
-                  onChange({
-                    ...doc,
-                    nodes: doc.nodes.map((n) =>
-                      n.id === sceneLoc.id
-                        ? {
-                            ...n,
-                            data: {
-                              ...n.data,
-                              background: resolvedUrl,
-                              backgroundAssetId: meta.id,
-                            },
-                          }
-                        : n,
-                    ),
-                  });
-                }
-              }}
-            />
+            <AssetPanel categorized />
           </div>
         </aside>
 
-        {tab === "plan" && floatScene ? (
+        {floatSceneLocId ? (
           <FloatingScene
             doc={doc}
             onChange={onChange}
-            onClose={() => setFloatScene(false)}
+            initialLocId={floatSceneLocId}
+            onClose={() => setFloatSceneLocId(null)}
           />
         ) : null}
       </div>

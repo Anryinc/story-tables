@@ -5,7 +5,8 @@ export type ActionIntent =
   | { type: "move"; toLocationId: string }
   | { type: "inspect"; targetId: string }
   | { type: "talk"; npcId: string; optionId: string }
-  | { type: "share"; clueId: string };
+  | { type: "share"; clueId: string }
+  | { type: "ability"; abilityId: string };
 
 export type ActionOption = {
   id: string;
@@ -29,7 +30,6 @@ export type SharePayload = {
   round: number;
 };
 
-/** Personal timeline / event toast — NOT the share board. */
 export type PopupNotice = {
   id: string;
   title: string;
@@ -44,6 +44,14 @@ export type JournalEntry = {
   body: string;
 };
 
+export type CharacterOption = {
+  id: string;
+  name: string;
+  blurb: string;
+  pathway?: string;
+  portraitUrl?: string;
+};
+
 export type TurnSnapshot = {
   code: string;
   projectId: string;
@@ -53,6 +61,7 @@ export type TurnSnapshot = {
   phase: "lobby" | "planning";
   round: number;
   seats: Seat[];
+  characterOptions: CharacterOption[];
   myCharacterId: string | null;
   takenCharacterIds: string[];
   myLocationId: string | null;
@@ -67,7 +76,6 @@ export type TurnSnapshot = {
   myClues: Clue[];
   myJournal: JournalEntry[];
   shareBoard: SharePayload[];
-  /** Queue of personal notices (timeline etc.) — phone shows as modal */
   myPopups: PopupNotice[];
   lastResult: string | null;
   lastPublicEvent: string | null;
