@@ -36,10 +36,12 @@ export function NodeCanvas({
   doc,
   onChange,
   hideTimelineNodes = false,
+  onOpenScene,
 }: {
   doc: ScenarioDocument;
   onChange: (d: ScenarioDocument) => void;
   hideTimelineNodes?: boolean;
+  onOpenScene?: (locationNodeId: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [view, setView] = useState({ x: 40, y: 40, scale: 1 });
@@ -224,6 +226,7 @@ export function NodeCanvas({
                 fontSize: 12,
                 borderColor: NODE_META[k].color,
                 color: NODE_META[k].color,
+                background: NODE_META[k].fill,
               }}
               onClick={() => add(k)}
             >
@@ -305,8 +308,8 @@ export function NodeCanvas({
                   width: NW,
                   minHeight: NH,
                   borderRadius: 12,
-                  border: `1px solid ${sel ? meta.color : "#2a2622"}`,
-                  background: "#141210",
+                  border: `1px solid ${sel ? meta.color : meta.color + "66"}`,
+                  background: meta.fill,
                   boxShadow: sel ? `0 0 0 1px ${meta.color}` : undefined,
                   userSelect: "none",
                 }}
@@ -314,14 +317,39 @@ export function NodeCanvas({
                 <div
                   style={{
                     padding: "8px 10px 4px",
-                    borderBottom: "1px solid #2a2622",
+                    borderBottom: `1px solid ${meta.color}33`,
                     color: meta.color,
                     fontSize: 11,
                     letterSpacing: "0.12em",
                     textTransform: "uppercase",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
                   }}
                 >
-                  {meta.label}
+                  <span style={{ flex: 1 }}>{meta.label}</span>
+                  {n.kind === "location" && onOpenScene ? (
+                    <button
+                      type="button"
+                      title="Превью сцены"
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenScene(n.id);
+                      }}
+                      style={{
+                        border: `1px solid ${meta.color}`,
+                        background: "transparent",
+                        color: meta.color,
+                        borderRadius: 4,
+                        fontSize: 10,
+                        padding: "1px 5px",
+                        cursor: "pointer",
+                      }}
+                    >
+                      ◈
+                    </button>
+                  ) : null}
                 </div>
                 <div
                   style={{ padding: "8px 10px", color: "var(--paper)", fontSize: 14 }}
@@ -394,7 +422,7 @@ export function NodeCanvas({
       >
         {!selected ? (
           <p className="muted" style={{ fontSize: 13 }}>
-            План локаций и связей. События по ходам — на шкале сверху.
+            План локаций и связей. На локации кнопка ◈ — превью сцены.
           </p>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
@@ -437,6 +465,15 @@ export function NodeCanvas({
                     updateNode(selected.id, { data: { description: v } })
                   }
                 />
+                {onOpenScene ? (
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    onClick={() => onOpenScene(selected.id)}
+                  >
+                    Открыть превью сцены
+                  </button>
+                ) : null}
               </>
             ) : null}
             {selected.kind === "event" ? (
