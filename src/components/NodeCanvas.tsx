@@ -5,6 +5,7 @@ import {
   type CSSProperties,
   type PointerEvent as RE,
 } from "react";
+import { addAssetFromFile, resolveAssetUrl } from "@/lib/assets/store";
 import {
   NODE_META,
   createNode,
@@ -14,23 +15,50 @@ import {
   type ScenarioNode,
 } from "@/lib/scenario/types";
 
-const NW = 200;
-const NH = 96;
+/** Canvas shows only structural nodes; content lives inside location cards. */
+const CANVAS_KINDS = new Set<NodeKind>(["start", "location", "event", "branch"]);
 
-const PLAN_KINDS: NodeKind[] = [
-  "start",
-  "location",
-  "event",
-  "branch",
-  "npc",
-  "inspect",
-];
+const LOC_W = 220;
+const LOC_H = 200;
+const SMALL_W = 160;
+const SMALL_H = 72;
+
+function nodeSize(kind: NodeKind) {
+  if (kind === "location") return { w: LOC_W, h: LOC_H };
+  return { w: SMALL_W, h: SMALL_H };
+}
 
 type Drag =
   | { mode: "node"; id: string; ox: number; oy: number }
   | { mode: "pan"; ox: number; oy: number; vx: number; vy: number }
   | { mode: "link"; from: string; fromPort: string; x: number; y: number }
   | null;
+
+function childrenOf(
+  doc: ScenarioDocument,
+  locId: string,
+): { npcs: ScenarioNode[]; inspects: ScenarioNode[] } {
+  const childIds = new Set<
+    string
+  >();
+  for (const e of doc.edges) {
+    if (e.from === locId && (e.fromPort === "events" || e.fromPort === "out")) {
+      childIds.add(e.to);
+    }
+    if (e.to === locId && e.toPort === "events") {
+      childIds.add(e.from);
+    }
+  }
+  const npcs: ScenarioNode[] = [];
+  const inspects: ScenarioNode[] = [];
+  for (const id of childIds) {
+    const n = doc.nodes.find((x) => x.id === id);
+    if (!n) continue;
+    if (n.kind === "npc") npcs.push(n);
+    if (n.kind === "inspect") inspects.push(n);
+  }
+  return { npcs, inspects };
+}
 
 export function NodeCanvas({
   doc,
@@ -44,13 +72,16 @@ export function NodeCanvas({
   onOpenScene?: (locationNodeId: string) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editChildId, setEditChildId] = useState<string | null>(null);
   const [view, setView] = useState({ x: 40, y: 40, scale: 1 });
+  const [uploadingBg, setUploadingBg] = useState(false);
   const drag = useRef<Drag>(null);
   const boardRef = useRef<HTMLDivElement>(null);
 
-  const visibleNodes = hideTimelineNodes
-    ? doc.nodes.filter((n) => n.kind !== "timeline")
-    : doc.nodes;
+  const visibleNodes = doc.nodes.filter((n) => {
+    if (hideTimelineNodes && n.kind === "timeline") return false;
+    return CANVAS_KINDS.has(n.kind);
+  });
 
   const selected = doc.nodes.find((n) => n.id === selectedId) ?? null;
   const locations = doc.nodes.filter((n) => n.kind === "location");
@@ -74,26 +105,63 @@ export function NodeCanvas({
     [doc, onChange],
   );
 
-  const add = (kind: NodeKind) => {
+  const addLocation = () => {
     const n = createNode(
-      kind,
-      (200 - view.x) / view.scale,
-      (120 - view.y) / view.scale + doc.nodes.length * 10,
+      "location",
+      (120 - view.x) / view.scale,
+      (100 - view.y) / view.scale + locations.length * 40,
     );
+    n.data.title = `Комната ${locations.length + 1}`;
+    n.data.locationId = n.id;
+    onChange({ ...doc, nodes: [...doc.nodes, n] });
+    setSelectedId(n.id);
+    setEditChildId(null);
+  };
+
+  const addStart = () => {
+    if (doc.nodes.some((n) => n.kind === "start")) return;
+    const n = createNode("start", (80 - view.x) / view.scale, (80 - view.y) / view.scale);
     onChange({ ...doc, nodes: [...doc.nodes, n] });
     setSelectedId(n.id);
   };
 
-  const removeSelected = () => {
-    if (!selectedId) return;
+  const attachChild = (locId: string, kind: "npc" | "inspect") => {
+    const child = createNode(kind, 0, 0);
+    if (kind === "npc") {
+      child.data.title = "Новый NPC";
+      child.data.npcName = "Новый NPC";
+      child.data.npcIntro = "Кто это?";
+      child.data.body = "…";
+    } else {
+      child.data.title = "Осмотр";
+      child.data.inspectLabel = "Осмотреть…";
+      child.data.inspectResult = "Вы видите…";
+      child.data.once = true;
+    }
+    const edge: ScenarioEdge = {
+      id: `e_${locId}_${child.id}`,
+      from: locId,
+      fromPort: "events",
+      to: child.id,
+      toPort: "in",
+    };
     onChange({
       ...doc,
-      nodes: doc.nodes.filter((n) => n.id !== selectedId),
-      edges: doc.edges.filter(
-        (e) => e.from !== selectedId && e.to !== selectedId,
-      ),
+      nodes: [...doc.nodes, child],
+      edges: [...doc.edges, edge],
     });
-    setSelectedId(null);
+    setSelectedId(locId);
+    setEditChildId(child.id);
+  };
+
+  const removeNode = (id: string) => {
+    onChange({
+      ...doc,
+      nodes: doc.nodes.filter((n) => n.id !== id),
+      edges: doc.edges.filter((e) => e.from !== id && e.to !== id),
+    });
+    if (selectedId === id) setSelectedId(null);
+    if (editChildId === id) setEditChildId(null);
   };
 
   const onBoardDown = (e: RE) => {
@@ -101,6 +169,7 @@ export function NodeCanvas({
     if ((e.target as HTMLElement).closest("[data-node]")) return;
     if ((e.target as HTMLElement).closest("[data-port]")) return;
     setSelectedId(null);
+    setEditChildId(null);
     drag.current = {
       mode: "pan",
       ox: e.clientX,
@@ -154,6 +223,7 @@ export function NodeCanvas({
           fromPort: d.fromPort,
           to: toId,
           toPort,
+          label: "путь",
         };
         onChange({ ...doc, edges: [...doc.edges, edge] });
       }
@@ -164,6 +234,7 @@ export function NodeCanvas({
   const startNodeDrag = (e: RE, n: ScenarioNode) => {
     e.stopPropagation();
     setSelectedId(n.id);
+    setEditChildId(null);
     const rect = boardRef.current?.getBoundingClientRect();
     if (!rect) return;
     const ox = (e.clientX - rect.left - view.x) / view.scale - n.x;
@@ -177,17 +248,38 @@ export function NodeCanvas({
     e.preventDefault();
     const n = doc.nodes.find((x) => x.id === nodeId);
     if (!n) return;
+    const { w, h } = nodeSize(n.kind);
     drag.current = {
       mode: "link",
       from: nodeId,
       fromPort: portId,
-      x: n.x + NW,
-      y: n.y + NH / 2,
+      x: n.x + w,
+      y: n.y + h / 2,
     };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
 
   const linkPreview = drag.current?.mode === "link" ? drag.current : null;
+
+  const onBgFile = async (locId: string, file: File | undefined) => {
+    if (!file?.type.startsWith("image/")) return;
+    setUploadingBg(true);
+    try {
+      const meta = await addAssetFromFile(file);
+      const url = await resolveAssetUrl(meta);
+      if (url) {
+        updateNode(locId, {
+          data: { background: url, backgroundAssetId: meta.id },
+        });
+      }
+    } finally {
+      setUploadingBg(false);
+    }
+  };
+
+  const editChild = editChildId
+    ? doc.nodes.find((n) => n.id === editChildId)
+    : null;
 
   return (
     <div style={{ display: "flex", height: "100%", minHeight: 0 }}>
@@ -213,26 +305,19 @@ export function NodeCanvas({
             display: "flex",
             flexWrap: "wrap",
             gap: 6,
-            maxWidth: "70%",
           }}
         >
-          {PLAN_KINDS.map((k) => (
-            <button
-              key={k}
-              type="button"
-              className="btn"
-              style={{
-                height: 32,
-                fontSize: 12,
-                borderColor: NODE_META[k].color,
-                color: NODE_META[k].color,
-                background: NODE_META[k].fill,
-              }}
-              onClick={() => add(k)}
-            >
-              + {NODE_META[k].label}
+          <button type="button" className="btn" style={toolBtn} onClick={addLocation}>
+            + Комната
+          </button>
+          {!doc.nodes.some((n) => n.kind === "start") ? (
+            <button type="button" className="btn" style={toolBtn} onClick={addStart}>
+              + Старт
             </button>
-          ))}
+          ) : null}
+          <span className="faint" style={{ fontSize: 11, alignSelf: "center", marginLeft: 4 }}>
+            Связи: тяните порт → порт. NPC и осмотры — внутри комнаты.
+          </span>
         </div>
 
         <svg
@@ -249,10 +334,14 @@ export function NodeCanvas({
               const a = visibleNodes.find((n) => n.id === e.from);
               const b = visibleNodes.find((n) => n.id === e.to);
               if (!a || !b) return null;
-              const x1 = a.x + NW;
-              const y1 = a.y + NH / 2;
+              // only draw move links between visible structural nodes
+              if (e.fromPort === "events") return null;
+              const sa = nodeSize(a.kind);
+              const sb = nodeSize(b.kind);
+              const x1 = a.x + sa.w;
+              const y1 = a.y + sa.h / 2;
               const x2 = b.x;
-              const y2 = b.y + NH / 2;
+              const y2 = b.y + sb.h / 2;
               const mx = (x1 + x2) / 2;
               return (
                 <path
@@ -265,20 +354,22 @@ export function NodeCanvas({
               );
             })}
             {linkPreview ? (
-              <line
-                x1={
-                  (doc.nodes.find((n) => n.id === linkPreview.from)?.x ?? 0) + NW
-                }
-                y1={
-                  (doc.nodes.find((n) => n.id === linkPreview.from)?.y ?? 0) +
-                  NH / 2
-                }
-                x2={linkPreview.x}
-                y2={linkPreview.y}
-                stroke="#c4a574"
-                strokeWidth={2}
-                strokeDasharray="6 4"
-              />
+              (() => {
+                const from = doc.nodes.find((n) => n.id === linkPreview.from);
+                if (!from) return null;
+                const s = nodeSize(from.kind);
+                return (
+                  <line
+                    x1={from.x + s.w}
+                    y1={from.y + s.h / 2}
+                    x2={linkPreview.x}
+                    y2={linkPreview.y}
+                    stroke="#c4a574"
+                    strokeWidth={2}
+                    strokeDasharray="6 4"
+                  />
+                );
+              })()
             ) : null}
           </g>
         </svg>
@@ -295,6 +386,137 @@ export function NodeCanvas({
           {visibleNodes.map((n) => {
             const meta = NODE_META[n.kind];
             const sel = n.id === selectedId;
+            const { w, h } = nodeSize(n.kind);
+
+            if (n.kind === "location") {
+              const { npcs, inspects } = childrenOf(doc, n.id);
+              return (
+                <div
+                  key={n.id}
+                  data-node
+                  data-node-id={n.id}
+                  onPointerDown={(e) => startNodeDrag(e, n)}
+                  style={{
+                    position: "absolute",
+                    left: n.x,
+                    top: n.y,
+                    width: w,
+                    minHeight: h,
+                    borderRadius: 14,
+                    border: `1px solid ${sel ? meta.color : meta.color + "55"}`,
+                    background: meta.fill,
+                    boxShadow: sel ? `0 0 0 2px ${meta.color}88` : "0 8px 24px rgba(0,0,0,0.35)",
+                    overflow: "hidden",
+                    userSelect: "none",
+                    display: "flex",
+                    flexDirection: "column",
+                  }}
+                >
+                  {/* Scene preview — like player view */}
+                  <div
+                    style={{
+                      height: 110,
+                      background: "#0c0b0a",
+                      position: "relative",
+                      borderBottom: `1px solid ${meta.color}33`,
+                    }}
+                  >
+                    {n.data.background ? (
+                      <img
+                        src={n.data.background}
+                        alt=""
+                        draggable={false}
+                        style={{
+                          width: "100%",
+                          height: "100%",
+                          objectFit: "cover",
+                          display: "block",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          position: "absolute",
+                          inset: 0,
+                          display: "grid",
+                          placeItems: "center",
+                          color: "#5a564c",
+                          fontSize: 11,
+                        }}
+                      >
+                        нет фона
+                      </div>
+                    )}
+                    <div
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        padding: "16px 8px 6px",
+                        background:
+                          "linear-gradient(transparent, rgba(12,11,10,0.92))",
+                      }}
+                    >
+                      <div
+                        style={{
+                          color: "var(--paper)",
+                          fontSize: 13,
+                          fontFamily: '"Cormorant Garamond", serif',
+                        }}
+                      >
+                        {n.data.title}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div style={{ padding: "6px 8px 8px", flex: 1 }}>
+                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+                      {npcs.map((c) => (
+                        <span key={c.id} style={chipNpc}>
+                          {c.data.npcName || c.data.title}
+                        </span>
+                      ))}
+                      {inspects.map((c) => (
+                        <span key={c.id} style={chipInspect}>
+                          {c.data.inspectLabel || c.data.title}
+                        </span>
+                      ))}
+                      {!npcs.length && !inspects.length ? (
+                        <span className="faint" style={{ fontSize: 10 }}>
+                          пусто · настройте справа
+                        </span>
+                      ) : null}
+                    </div>
+                  </div>
+
+                  {/* ports: in left, out right — only move ports on canvas */}
+                  <span
+                    data-port
+                    data-port-id="in"
+                    data-port-dir="in"
+                    title="вход"
+                    style={{ ...portStyle, left: -6, top: 56, background: "#c4a574" }}
+                  />
+                  <span
+                    data-port
+                    data-port-id="out"
+                    data-port-dir="out"
+                    title="выход → связать с другой комнатой"
+                    onPointerDown={(e) => startLink(e, n.id, "out")}
+                    style={{
+                      ...portStyle,
+                      right: -6,
+                      top: 56,
+                      background: meta.color,
+                      cursor: "crosshair",
+                    }}
+                  />
+                </div>
+              );
+            }
+
+            // start / event / branch — compact
             return (
               <div
                 key={n.id}
@@ -305,61 +527,28 @@ export function NodeCanvas({
                   position: "absolute",
                   left: n.x,
                   top: n.y,
-                  width: NW,
-                  minHeight: NH,
+                  width: w,
+                  minHeight: h,
                   borderRadius: 12,
                   border: `1px solid ${sel ? meta.color : meta.color + "66"}`,
                   background: meta.fill,
                   boxShadow: sel ? `0 0 0 1px ${meta.color}` : undefined,
                   userSelect: "none",
+                  padding: "10px 12px",
                 }}
               >
                 <div
                   style={{
-                    padding: "8px 10px 4px",
-                    borderBottom: `1px solid ${meta.color}33`,
                     color: meta.color,
-                    fontSize: 11,
+                    fontSize: 10,
                     letterSpacing: "0.12em",
                     textTransform: "uppercase",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
                   }}
                 >
-                  <span style={{ flex: 1 }}>{meta.label}</span>
-                  {n.kind === "location" && onOpenScene ? (
-                    <button
-                      type="button"
-                      title="Превью сцены"
-                      onPointerDown={(e) => e.stopPropagation()}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onOpenScene(n.id);
-                      }}
-                      style={{
-                        border: `1px solid ${meta.color}`,
-                        background: "transparent",
-                        color: meta.color,
-                        borderRadius: 4,
-                        fontSize: 10,
-                        padding: "1px 5px",
-                        cursor: "pointer",
-                      }}
-                    >
-                      ◈
-                    </button>
-                  ) : null}
+                  {meta.label}
                 </div>
-                <div
-                  style={{ padding: "8px 10px", color: "var(--paper)", fontSize: 14 }}
-                >
+                <div style={{ color: "var(--paper)", fontSize: 13, marginTop: 4 }}>
                   {n.data.title}
-                  {n.kind === "event" ? (
-                    <div className="faint" style={{ fontSize: 11 }}>
-                      {n.data.scope ?? "actor"}
-                    </div>
-                  ) : null}
                 </div>
                 {n.ports
                   .filter((p) => p.dir === "in")
@@ -369,17 +558,7 @@ export function NodeCanvas({
                       data-port
                       data-port-id={p.id}
                       data-port-dir="in"
-                      title={p.label}
-                      style={{
-                        position: "absolute",
-                        left: -6,
-                        top: 28 + i * 18,
-                        width: 12,
-                        height: 12,
-                        borderRadius: 99,
-                        background: "#c4a574",
-                        border: "2px solid #0c0b0a",
-                      }}
+                      style={{ ...portStyle, left: -6, top: 24 + i * 16, background: "#c4a574" }}
                     />
                   ))}
                 {n.ports
@@ -390,17 +569,12 @@ export function NodeCanvas({
                       data-port
                       data-port-id={p.id}
                       data-port-dir="out"
-                      title={p.label}
                       onPointerDown={(e) => startLink(e, n.id, p.id)}
                       style={{
-                        position: "absolute",
+                        ...portStyle,
                         right: -6,
-                        top: 28 + i * 18,
-                        width: 12,
-                        height: 12,
-                        borderRadius: 99,
+                        top: 24 + i * 16,
                         background: meta.color,
-                        border: "2px solid #0c0b0a",
                         cursor: "crosshair",
                       }}
                     />
@@ -411,29 +585,39 @@ export function NodeCanvas({
         </div>
       </div>
 
+      {/* Inspector — scene-centric */}
       <aside
         style={{
-          width: 300,
+          width: selected?.kind === "location" ? 340 : 280,
           borderLeft: "1px solid var(--line)",
           padding: 14,
           overflow: "auto",
           background: "#0f0e0c",
+          transition: "width 0.15s ease",
         }}
       >
         {!selected ? (
           <p className="muted" style={{ fontSize: 13 }}>
-            План локаций и связей. На локации кнопка ◈ — превью сцены.
+            Выберите комнату на плане. Фон, NPC и осмотры настраиваются внутри
+            карточки — так ближе к тому, что увидят игроки.
           </p>
+        ) : selected.kind === "location" ? (
+          <LocationInspector
+            loc={selected}
+            doc={doc}
+            editChild={editChild}
+            uploadingBg={uploadingBg}
+            onUpdate={updateNode}
+            onBgFile={onBgFile}
+            onAttach={(k) => attachChild(selected.id, k)}
+            onEditChild={setEditChildId}
+            onRemoveChild={removeNode}
+            onRemoveLoc={() => removeNode(selected.id)}
+            onOpenScene={onOpenScene}
+          />
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
-            <p
-              className="brass"
-              style={{
-                fontSize: 11,
-                letterSpacing: "0.16em",
-                textTransform: "uppercase",
-              }}
-            >
+            <p className="brass" style={{ fontSize: 11, letterSpacing: "0.14em" }}>
               {NODE_META[selected.kind].label}
             </p>
             <Field
@@ -441,139 +625,16 @@ export function NodeCanvas({
               value={selected.data.title}
               onChange={(v) => updateNode(selected.id, { data: { title: v } })}
             />
-            {selected.kind === "location" ? (
-              <>
-                <Field
-                  label="locationId"
-                  value={selected.data.locationId ?? ""}
-                  onChange={(v) =>
-                    updateNode(selected.id, { data: { locationId: v } })
-                  }
-                />
-                <Field
-                  label="Фон (URL)"
-                  value={selected.data.background ?? ""}
-                  onChange={(v) =>
-                    updateNode(selected.id, { data: { background: v } })
-                  }
-                />
-                <Field
-                  label="Описание"
-                  value={selected.data.description ?? ""}
-                  multiline
-                  onChange={(v) =>
-                    updateNode(selected.id, { data: { description: v } })
-                  }
-                />
-                {onOpenScene ? (
-                  <button
-                    type="button"
-                    className="btn btn-primary"
-                    onClick={() => onOpenScene(selected.id)}
-                  >
-                    Открыть превью сцены
-                  </button>
-                ) : null}
-              </>
-            ) : null}
             {selected.kind === "event" ? (
-              <>
-                <Field
-                  label="Текст"
-                  value={selected.data.body ?? ""}
-                  multiline
-                  onChange={(v) =>
-                    updateNode(selected.id, { data: { body: v } })
-                  }
-                />
-                <label className="muted" style={{ fontSize: 12 }}>
-                  Кому
-                  <select
-                    value={selected.data.scope ?? "actor"}
-                    onChange={(e) =>
-                      updateNode(selected.id, {
-                        data: {
-                          scope: e.target.value as
-                            | "actor"
-                            | "same_location"
-                            | "all",
-                        },
-                      })
-                    }
-                    style={selectStyle}
-                  >
-                    <option value="actor">Автор действия</option>
-                    <option value="same_location">Выбранная локация</option>
-                    <option value="all">Все</option>
-                  </select>
-                </label>
-                {selected.data.scope === "same_location" ? (
-                  <label className="muted" style={{ fontSize: 12 }}>
-                    Локация
-                    <select
-                      value={selected.data.scopeLocationId ?? ""}
-                      onChange={(e) =>
-                        updateNode(selected.id, {
-                          data: {
-                            scopeLocationId: e.target.value || undefined,
-                          },
-                        })
-                      }
-                      style={selectStyle}
-                    >
-                      <option value="">—</option>
-                      {locations.map((l) => (
-                        <option key={l.id} value={l.data.locationId || l.id}>
-                          {l.data.title}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                ) : null}
-              </>
+              <Field
+                label="Текст"
+                value={selected.data.body ?? ""}
+                multiline
+                onChange={(v) => updateNode(selected.id, { data: { body: v } })}
+              />
             ) : null}
-            {selected.kind === "inspect" ? (
-              <>
-                <Field
-                  label="Что осмотреть"
-                  value={selected.data.inspectLabel ?? ""}
-                  onChange={(v) =>
-                    updateNode(selected.id, { data: { inspectLabel: v } })
-                  }
-                />
-                <Field
-                  label="Результат"
-                  value={selected.data.inspectResult ?? ""}
-                  multiline
-                  onChange={(v) =>
-                    updateNode(selected.id, { data: { inspectResult: v } })
-                  }
-                />
-              </>
-            ) : null}
-            {selected.kind === "npc" ? (
-              <>
-                <Field
-                  label="Имя"
-                  value={selected.data.npcName ?? selected.data.title}
-                  onChange={(v) =>
-                    updateNode(selected.id, {
-                      data: { npcName: v, title: v },
-                    })
-                  }
-                />
-                <Field
-                  label="Интро"
-                  value={selected.data.npcIntro ?? ""}
-                  multiline
-                  onChange={(v) =>
-                    updateNode(selected.id, { data: { npcIntro: v } })
-                  }
-                />
-              </>
-            ) : null}
-            <button type="button" className="btn" onClick={removeSelected}>
-              Удалить ноду
+            <button type="button" className="btn" onClick={() => removeNode(selected.id)}>
+              Удалить
             </button>
           </div>
         )}
@@ -582,15 +643,344 @@ export function NodeCanvas({
   );
 }
 
-const selectStyle: CSSProperties = {
-  display: "block",
-  width: "100%",
-  marginTop: 4,
-  background: "#0c0b0a",
-  color: "var(--paper)",
-  border: "1px solid var(--line)",
-  borderRadius: 8,
-  padding: 8,
+function LocationInspector({
+  loc,
+  doc,
+  editChild,
+  uploadingBg,
+  onUpdate,
+  onBgFile,
+  onAttach,
+  onEditChild,
+  onRemoveChild,
+  onRemoveLoc,
+  onOpenScene,
+}: {
+  loc: ScenarioNode;
+  doc: ScenarioDocument;
+  editChild: ScenarioNode | null | undefined;
+  uploadingBg: boolean;
+  onUpdate: (
+    id: string,
+    patch: Partial<ScenarioNode> | { data: Partial<ScenarioNode["data"]> },
+  ) => void;
+  onBgFile: (locId: string, file: File | undefined) => void;
+  onAttach: (k: "npc" | "inspect") => void;
+  onEditChild: (id: string | null) => void;
+  onRemoveChild: (id: string) => void;
+  onRemoveLoc: () => void;
+  onOpenScene?: (id: string) => void;
+}) {
+  const { npcs, inspects } = childrenOf(doc, loc.id);
+
+  return (
+    <div style={{ display: "grid", gap: 12 }}>
+      <p className="brass" style={{ fontSize: 11, letterSpacing: "0.14em", margin: 0 }}>
+        СЦЕНА / КОМНАТА
+      </p>
+
+      {/* Live preview strip */}
+      <div
+        style={{
+          borderRadius: 10,
+          overflow: "hidden",
+          border: "1px solid var(--line)",
+          background: "#0c0b0a",
+          aspectRatio: "16 / 9",
+          position: "relative",
+        }}
+      >
+        {loc.data.background ? (
+          <img
+            src={loc.data.background}
+            alt=""
+            style={{ width: "100%", height: "100%", objectFit: "cover" }}
+          />
+        ) : (
+          <div
+            style={{
+              position: "absolute",
+              inset: 0,
+              display: "grid",
+              placeItems: "center",
+              color: "#5a564c",
+              fontSize: 12,
+            }}
+          >
+            Фон сцены
+          </div>
+        )}
+        <div
+          style={{
+            position: "absolute",
+            left: 0,
+            right: 0,
+            bottom: 0,
+            padding: "20px 10px 8px",
+            background: "linear-gradient(transparent, rgba(0,0,0,0.85))",
+            color: "var(--paper)",
+            fontFamily: '"Cormorant Garamond", serif',
+            fontSize: 16,
+          }}
+        >
+          {loc.data.title}
+        </div>
+      </div>
+
+      <Field
+        label="Название"
+        value={loc.data.title}
+        onChange={(v) => onUpdate(loc.id, { data: { title: v } })}
+      />
+      <Field
+        label="locationId"
+        value={loc.data.locationId ?? ""}
+        onChange={(v) => onUpdate(loc.id, { data: { locationId: v } })}
+      />
+      <Field
+        label="Описание (для мастера)"
+        value={loc.data.description ?? ""}
+        multiline
+        onChange={(v) => onUpdate(loc.id, { data: { description: v } })}
+      />
+
+      <div style={{ display: "grid", gap: 6 }}>
+        <span className="muted" style={{ fontSize: 11 }}>
+          Фон
+        </span>
+        <Field
+          label="URL"
+          value={loc.data.background ?? ""}
+          onChange={(v) => onUpdate(loc.id, { data: { background: v || undefined } })}
+        />
+        <label className="btn" style={{ textAlign: "center", cursor: "pointer", height: 32, fontSize: 12 }}>
+          {uploadingBg ? "Загрузка…" : "Загрузить с диска"}
+          <input
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(e) => {
+              onBgFile(loc.id, e.target.files?.[0]);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+
+      {/* NPCs */}
+      <section>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <span className="brass" style={{ fontSize: 11, flex: 1 }}>
+            NPC
+          </span>
+          <button type="button" className="btn" style={{ height: 26, fontSize: 11 }} onClick={() => onAttach("npc")}>
+            + NPC
+          </button>
+        </div>
+        {npcs.length === 0 ? (
+          <p className="faint" style={{ fontSize: 11 }}>Нет</p>
+        ) : (
+          npcs.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className="btn"
+              style={{
+                width: "100%",
+                marginBottom: 4,
+                height: "auto",
+                padding: 8,
+                textAlign: "left",
+                borderColor: editChild?.id === c.id ? "var(--brass)" : undefined,
+              }}
+              onClick={() => onEditChild(editChild?.id === c.id ? null : c.id)}
+            >
+              {c.data.npcName || c.data.title}
+            </button>
+          ))
+        )}
+      </section>
+
+      {/* Inspects */}
+      <section>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 6 }}>
+          <span className="brass" style={{ fontSize: 11, flex: 1 }}>
+            Осмотры / улики
+          </span>
+          <button
+            type="button"
+            className="btn"
+            style={{ height: 26, fontSize: 11 }}
+            onClick={() => onAttach("inspect")}
+          >
+            + Осмотр
+          </button>
+        </div>
+        {inspects.length === 0 ? (
+          <p className="faint" style={{ fontSize: 11 }}>Нет</p>
+        ) : (
+          inspects.map((c) => (
+            <button
+              key={c.id}
+              type="button"
+              className="btn"
+              style={{
+                width: "100%",
+                marginBottom: 4,
+                height: "auto",
+                padding: 8,
+                textAlign: "left",
+                borderColor: editChild?.id === c.id ? "#9a8bc4" : undefined,
+              }}
+              onClick={() => onEditChild(editChild?.id === c.id ? null : c.id)}
+            >
+              {c.data.inspectLabel || c.data.title}
+            </button>
+          ))
+        )}
+      </section>
+
+      {/* Child editor */}
+      {editChild?.kind === "npc" ? (
+        <div className="card" style={{ display: "grid", gap: 8 }}>
+          <p className="brass" style={{ fontSize: 10, margin: 0 }}>
+            NPC · диалог
+          </p>
+          <Field
+            label="Имя"
+            value={editChild.data.npcName ?? ""}
+            onChange={(v) =>
+              onUpdate(editChild.id, { data: { npcName: v, title: v } })
+            }
+          />
+          <Field
+            label="Интро (видно в локации)"
+            value={editChild.data.npcIntro ?? ""}
+            multiline
+            onChange={(v) => onUpdate(editChild.id, { data: { npcIntro: v } })}
+          />
+          <Field
+            label="Реплика при разговоре"
+            value={editChild.data.body ?? ""}
+            multiline
+            onChange={(v) => onUpdate(editChild.id, { data: { body: v } })}
+          />
+          <Field
+            label="Портрет URL"
+            value={editChild.data.portraitUrl ?? ""}
+            onChange={(v) =>
+              onUpdate(editChild.id, { data: { portraitUrl: v || undefined } })
+            }
+          />
+          <button
+            type="button"
+            className="btn"
+            style={{ color: "var(--danger)", fontSize: 11 }}
+            onClick={() => {
+              onRemoveChild(editChild.id);
+              onEditChild(null);
+            }}
+          >
+            Удалить NPC
+          </button>
+        </div>
+      ) : null}
+
+      {editChild?.kind === "inspect" ? (
+        <div className="card" style={{ display: "grid", gap: 8 }}>
+          <p className="brass" style={{ fontSize: 10, margin: 0 }}>
+            Осмотр · интеракция
+          </p>
+          <Field
+            label="Подпись действия"
+            value={editChild.data.inspectLabel ?? ""}
+            onChange={(v) =>
+              onUpdate(editChild.id, {
+                data: { inspectLabel: v, title: v },
+              })
+            }
+          />
+          <Field
+            label="Результат"
+            value={editChild.data.inspectResult ?? ""}
+            multiline
+            onChange={(v) =>
+              onUpdate(editChild.id, { data: { inspectResult: v } })
+            }
+          />
+          <label className="muted" style={{ fontSize: 12 }}>
+            <input
+              type="checkbox"
+              checked={editChild.data.once !== false}
+              onChange={(e) =>
+                onUpdate(editChild.id, { data: { once: e.target.checked } })
+              }
+            />{" "}
+            Один раз за игру
+          </label>
+          <button
+            type="button"
+            className="btn"
+            style={{ color: "var(--danger)", fontSize: 11 }}
+            onClick={() => {
+              onRemoveChild(editChild.id);
+              onEditChild(null);
+            }}
+          >
+            Удалить осмотр
+          </button>
+        </div>
+      ) : null}
+
+      {onOpenScene ? (
+        <button
+          type="button"
+          className="btn btn-primary"
+          onClick={() => onOpenScene(loc.id)}
+        >
+          Превью сцены (окно)
+        </button>
+      ) : null}
+
+      <button type="button" className="btn" style={{ color: "var(--danger)" }} onClick={onRemoveLoc}>
+        Удалить комнату
+      </button>
+    </div>
+  );
+}
+
+const toolBtn: CSSProperties = {
+  height: 32,
+  fontSize: 12,
+  borderColor: "#c4a574",
+  color: "#c4a574",
+  background: "#2a2218",
+};
+
+const portStyle: CSSProperties = {
+  position: "absolute",
+  width: 12,
+  height: 12,
+  borderRadius: 99,
+  border: "2px solid #0c0b0a",
+};
+
+const chipNpc: CSSProperties = {
+  fontSize: 9,
+  padding: "2px 6px",
+  borderRadius: 99,
+  background: "#182a24",
+  color: "#8bc4b0",
+  border: "1px solid #8bc4b044",
+};
+
+const chipInspect: CSSProperties = {
+  fontSize: 9,
+  padding: "2px 6px",
+  borderRadius: 99,
+  background: "#22182a",
+  color: "#9a8bc4",
+  border: "1px solid #9a8bc444",
 };
 
 function Field({
@@ -605,42 +995,31 @@ function Field({
   multiline?: boolean;
 }) {
   return (
-    <label className="muted" style={{ fontSize: 12, display: "block" }}>
+    <label className="muted" style={{ fontSize: 11, display: "block" }}>
       {label}
       {multiline ? (
         <textarea
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          rows={4}
-          style={{
-            display: "block",
-            width: "100%",
-            marginTop: 4,
-            background: "#0c0b0a",
-            color: "var(--paper)",
-            border: "1px solid var(--line)",
-            borderRadius: 8,
-            padding: 8,
-            font: "inherit",
-          }}
+          rows={3}
+          style={fieldInput}
         />
       ) : (
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          style={{
-            display: "block",
-            width: "100%",
-            marginTop: 4,
-            background: "#0c0b0a",
-            color: "var(--paper)",
-            border: "1px solid var(--line)",
-            borderRadius: 8,
-            padding: 8,
-            font: "inherit",
-          }}
-        />
+        <input value={value} onChange={(e) => onChange(e.target.value)} style={fieldInput} />
       )}
     </label>
   );
 }
+
+const fieldInput: CSSProperties = {
+  display: "block",
+  width: "100%",
+  marginTop: 4,
+  background: "#0c0b0a",
+  color: "var(--paper)",
+  border: "1px solid var(--line)",
+  borderRadius: 8,
+  padding: 8,
+  font: "inherit",
+  fontSize: 13,
+};
