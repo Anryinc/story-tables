@@ -2,6 +2,7 @@ import {
   useCallback,
   useRef,
   useState,
+  type CSSProperties,
   type PointerEvent as RE,
 } from "react";
 import {
@@ -53,7 +54,10 @@ export function NodeCanvas({
   const locations = doc.nodes.filter((n) => n.kind === "location");
 
   const updateNode = useCallback(
-    (id: string, patch: Partial<ScenarioNode> | { data: Partial<ScenarioNode["data"]> }) => {
+    (
+      id: string,
+      patch: Partial<ScenarioNode> | { data: Partial<ScenarioNode["data"]> },
+    ) => {
       onChange({
         ...doc,
         nodes: doc.nodes.map((n) => {
@@ -83,7 +87,9 @@ export function NodeCanvas({
     onChange({
       ...doc,
       nodes: doc.nodes.filter((n) => n.id !== selectedId),
-      edges: doc.edges.filter((e) => e.from !== selectedId && e.to !== selectedId),
+      edges: doc.edges.filter(
+        (e) => e.from !== selectedId && e.to !== selectedId,
+      ),
     });
     setSelectedId(null);
   };
@@ -257,9 +263,12 @@ export function NodeCanvas({
             })}
             {linkPreview ? (
               <line
-                x1={(doc.nodes.find((n) => n.id === linkPreview.from)?.x ?? 0) + NW}
+                x1={
+                  (doc.nodes.find((n) => n.id === linkPreview.from)?.x ?? 0) + NW
+                }
                 y1={
-                  (doc.nodes.find((n) => n.id === linkPreview.from)?.y ?? 0) + NH / 2
+                  (doc.nodes.find((n) => n.id === linkPreview.from)?.y ?? 0) +
+                  NH / 2
                 }
                 x2={linkPreview.x}
                 y2={linkPreview.y}
@@ -314,7 +323,9 @@ export function NodeCanvas({
                 >
                   {meta.label}
                 </div>
-                <div style={{ padding: "8px 10px", color: "var(--paper)", fontSize: 14 }}>
+                <div
+                  style={{ padding: "8px 10px", color: "var(--paper)", fontSize: 14 }}
+                >
                   {n.data.title}
                   {n.kind === "event" ? (
                     <div className="faint" style={{ fontSize: 11 }}>
@@ -383,14 +394,17 @@ export function NodeCanvas({
       >
         {!selected ? (
           <p className="muted" style={{ fontSize: 13 }}>
-            План локаций и связей. События по ходам — на шкале сверху. Превью
-            сцены — кнопка в шапке.
+            План локаций и связей. События по ходам — на шкале сверху.
           </p>
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
             <p
               className="brass"
-              style={{ fontSize: 11, letterSpacing: "0.16em", textTransform: "uppercase" }}
+              style={{
+                fontSize: 11,
+                letterSpacing: "0.16em",
+                textTransform: "uppercase",
+              }}
             >
               {NODE_META[selected.kind].label}
             </p>
@@ -431,7 +445,9 @@ export function NodeCanvas({
                   label="Текст"
                   value={selected.data.body ?? ""}
                   multiline
-                  onChange={(v) => updateNode(selected.id, { data: { body: v } })}
+                  onChange={(v) =>
+                    updateNode(selected.id, { data: { body: v } })
+                  }
                 />
                 <label className="muted" style={{ fontSize: 12 }}>
                   Кому
@@ -470,10 +486,7 @@ export function NodeCanvas({
                     >
                       <option value="">—</option>
                       {locations.map((l) => (
-                        <option
-                          key={l.id}
-                          value={l.data.locationId || l.id}
-                        >
+                        <option key={l.id} value={l.data.locationId || l.id}>
                           {l.data.title}
                         </option>
                       ))}
@@ -532,7 +545,7 @@ export function NodeCanvas({
   );
 }
 
-const selectStyle: React.CSSProperties = {
+const selectStyle: CSSProperties = {
   display: "block",
   width: "100%",
   marginTop: 4,
