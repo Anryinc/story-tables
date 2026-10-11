@@ -15,33 +15,51 @@ export type ScenarioPort = {
   id: string;
   label: string;
   dir: "in" | "out";
-  /** Visual group: move | flow | data */
   kind?: "move" | "flow" | "data";
+};
+
+/** Object placed on a location scene stage (preview + future runtime hotspots). */
+export type SceneObject = {
+  id: string;
+  kind: "image" | "text" | "hotspot" | "npc" | "sound";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  label?: string;
+  text?: string;
+  /** asset library id or direct url */
+  assetId?: string;
+  url?: string;
+  /** link to graph node for interaction */
+  linkNodeId?: string;
+  interaction?: "none" | "inspect" | "talk";
 };
 
 export type ScenarioNodeData = {
   title: string;
-  /** location */
   locationId?: string;
   background?: string;
+  backgroundAssetId?: string;
   description?: string;
-  /** event */
+  /** scene stage objects */
+  sceneObjects?: SceneObject[];
   body?: string;
   scope?: EventScope;
   setFlags?: string[];
-  grantClue?: { id: string; title: string; body: string; source: string };
+  grantClue?: { id: string; title: string; body: string; source: string; imageUrl?: string };
   unlockLocationId?: string;
-  /** timeline */
   atRound?: number;
-  /** branch */
   flag?: string;
-  /** inspect */
   inspectLabel?: string;
   inspectResult?: string;
   once?: boolean;
-  /** npc */
   npcName?: string;
   npcIntro?: string;
+  portraitUrl?: string;
+  portraitAssetId?: string;
+  soundUrl?: string;
+  soundAssetId?: string;
 };
 
 export type ScenarioNode = {
@@ -80,8 +98,9 @@ export type ScenarioDocument = {
   manifest: ScenarioManifest;
   nodes: ScenarioNode[];
   edges: ScenarioEdge[];
-  /** Global flags initially false; set by events */
   initialFlags?: string[];
+  /** ids of assets used in this project (from global library) */
+  assetIds?: string[];
 };
 
 export const NODE_META: Record<
@@ -156,6 +175,7 @@ export function createNode(kind: NodeKind, x: number, y: number): ScenarioNode {
       scope: kind === "event" ? "actor" : undefined,
       atRound: kind === "timeline" ? 1 : undefined,
       once: kind === "inspect" ? true : undefined,
+      sceneObjects: kind === "location" ? [] : undefined,
     },
     ports: meta.defaultPorts.map((p) => ({ ...p })),
   };
@@ -169,6 +189,7 @@ export function emptyScenario(title = "Новый сценарий"): ScenarioDo
   loc.data.title = "Первая комната";
   loc.data.locationId = "room_1";
   loc.data.description = "Опишите место…";
+  loc.data.sceneObjects = [];
   return {
     version: 1,
     manifest: {
@@ -192,5 +213,6 @@ export function emptyScenario(title = "Новый сценарий"): ScenarioDo
         label: "начало",
       },
     ],
+    assetIds: [],
   };
 }

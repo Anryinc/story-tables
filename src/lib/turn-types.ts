@@ -29,6 +29,14 @@ export type SharePayload = {
   round: number;
 };
 
+/** Personal timeline / event toast — NOT the share board. */
+export type PopupNotice = {
+  id: string;
+  title: string;
+  body: string;
+  round: number;
+};
+
 export type JournalEntry = {
   id: string;
   round: number;
@@ -59,6 +67,8 @@ export type TurnSnapshot = {
   myClues: Clue[];
   myJournal: JournalEntry[];
   shareBoard: SharePayload[];
+  /** Queue of personal notices (timeline etc.) — phone shows as modal */
+  myPopups: PopupNotice[];
   lastResult: string | null;
   lastPublicEvent: string | null;
 };
