@@ -1,13 +1,15 @@
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { makeRoomCode } from "@/lib/ids";
-import { getProject } from "@/projects/registry";
+import { resolvePlayable } from "@/lib/scenario/resolve";
+import { getStoredScenario } from "@/lib/scenario/store";
 
 export function ProjectPage() {
   const { projectId = "" } = useParams();
-  const project = getProject(projectId);
+  const pack = resolvePlayable(projectId);
+  const stored = getStoredScenario(projectId);
   const navigate = useNavigate();
 
-  if (!project) {
+  if (!pack) {
     return (
       <main style={{ padding: 40, textAlign: "center" }}>
         <p>Проект не найден</p>
@@ -16,22 +18,27 @@ export function ProjectPage() {
     );
   }
 
-  const m = project.manifest;
+  const locCount = Object.keys(pack.graph.locations).length;
+  const cover =
+    stored?.manifest.coverImage ||
+    Object.values(pack.graph.locations).find((l) => l.image)?.image;
 
   return (
     <main style={{ minHeight: "100dvh", position: "relative" }}>
-      <img
-        src={m.coverImage}
-        alt=""
-        style={{
-          position: "absolute",
-          inset: 0,
-          width: "100%",
-          height: "100%",
-          objectFit: "cover",
-          opacity: 0.35,
-        }}
-      />
+      {cover ? (
+        <img
+          src={cover}
+          alt=""
+          style={{
+            position: "absolute",
+            inset: 0,
+            width: "100%",
+            height: "100%",
+            objectFit: "cover",
+            opacity: 0.35,
+          }}
+        />
+      ) : null}
       <div
         style={{
           position: "relative",
@@ -45,14 +52,17 @@ export function ProjectPage() {
         }}
       >
         <Link to="/" className="faint" style={{ fontSize: 12 }}>
-          ← Хаб
+          ← Сценарии
         </Link>
         <h1 className="font-display" style={{ fontSize: 40, color: "var(--paper)" }}>
-          {m.title}
+          {pack.title}
         </h1>
-        <p className="muted">{m.description}</p>
+        <p className="muted">
+          {stored?.manifest.blurb ||
+            "Сценарий из мастерской. Пошаговые ходы, личные и общие события."}
+        </p>
         <p className="faint" style={{ fontSize: 13 }}>
-          {m.playersMin}–{m.playersMax} игрока · ~{m.estimatedMinutes} мин
+          Локаций: {locCount} · timeline-событий: {pack.timeline.length}
         </p>
         <button
           type="button"
@@ -66,13 +76,15 @@ export function ProjectPage() {
         >
           Открыть стол на этом ПК
         </button>
-        <Link
-          to={`/studio/${projectId}`}
-          className="btn"
-          style={{ marginTop: 10, width: "100%" }}
-        >
-          Мастерская (граф)
-        </Link>
+        {stored ? (
+          <Link
+            to={`/studio/${projectId}`}
+            className="btn"
+            style={{ marginTop: 10, width: "100%" }}
+          >
+            Редактировать в мастерской
+          </Link>
+        ) : null}
       </div>
     </main>
   );

@@ -3,9 +3,9 @@ import { Link, useParams } from "react-router-dom";
 import type { DataConnection } from "peerjs";
 import { getClientId } from "@/lib/ids";
 import { openHostPeer, type GuestMsg, type HostMsg } from "@/lib/p2p";
+import { resolvePlayable } from "@/lib/scenario/resolve";
 import { TurnEngine } from "@/lib/turn-engine";
 import type { TurnSnapshot } from "@/lib/turn-types";
-import { getProject } from "@/projects/registry";
 import { ROSTER } from "@/projects/roster";
 import QRCode from "qrcode";
 
@@ -13,12 +13,12 @@ export function TablePage() {
   const { code = "" } = useParams();
   const clientId = useMemo(() => getClientId(), []);
   const projectId = sessionStorage.getItem("story-tables.project") ?? "cherwood";
-  const project = getProject(projectId);
+  const pack = useMemo(() => resolvePlayable(projectId), [projectId]);
   const engineRef = useRef<TurnEngine | null>(null);
   const connsRef = useRef<Map<string, DataConnection>>(new Map());
   const [room, setRoom] = useState<TurnSnapshot | null>(null);
   const [peerReady, setPeerReady] = useState(false);
-  const [qr, setQr] = useState<string>("");
+  const [qr, setQr] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
   const pushAll = () => {
@@ -32,21 +32,20 @@ export function TablePage() {
   };
 
   useEffect(() => {
-    if (!project || !code) return;
+    if (!pack || !code) return;
     const eng = new TurnEngine(
       code,
       clientId,
-      project.manifest.id,
-      project.manifest.title,
-      project.graph,
+      pack.projectId,
+      pack.title,
+      pack.graph,
+      pack.timeline,
     );
     engineRef.current = eng;
     setRoom(eng.snapshotFor(clientId));
     const unsub = eng.subscribe(pushAll);
 
-    const peer = openHostPeer(code, (conn, msg) => {
-      handleGuest(conn, msg);
-    });
+    const peer = openHostPeer(code, (conn, msg) => handleGuest(conn, msg));
     peer.on("open", () => setPeerReady(true));
     peer.on("error", (e) => setErr(String(e)));
 
@@ -85,13 +84,13 @@ export function TablePage() {
       peer.destroy();
       engineRef.current = null;
     };
-  }, [code, clientId, project]);
+  }, [code, clientId, pack]);
 
-  if (!project) {
+  if (!pack) {
     return (
       <main style={{ padding: 40 }}>
-        <p>Нет проекта. Откройте стол с карточки сценария.</p>
-        <Link to="/">Хаб</Link>
+        <p>Нет проекта. Создайте сценарий в мастерской.</p>
+        <Link to="/">Сценарии</Link>
       </main>
     );
   }
@@ -221,7 +220,7 @@ export function TablePage() {
       )}
 
       <p className="faint" style={{ marginTop: 24, fontSize: 12 }}>
-        <Link to="/">← Хаб</Link> · Хост играет с телефона по QR при желании
+        <Link to="/">← Сценарии</Link>
       </p>
     </main>
   );

@@ -7,6 +7,7 @@ import {
 } from "./graph/runtime";
 import type { Clue, GraphDocument } from "./graph/types";
 import { newId } from "./ids";
+import type { TimelineRule } from "./scenario/compile";
 import { MAX_PARTY, ROSTER_BY_ID } from "@/projects/roster";
 import type {
   ActionIntent,
@@ -38,6 +39,7 @@ export class TurnEngine {
   readonly projectId: string;
   readonly projectTitle: string;
   private graph: GraphDocument;
+  private timeline: TimelineRule[];
   private phase: "lobby" | "planning" = "lobby";
   private round = 0;
   private seats: Seat[] = [];
@@ -52,6 +54,7 @@ export class TurnEngine {
   private shareBoard: SharePayload[] = [];
   private lastPublicEvent: string | null = null;
   private listeners = new Set<() => void>();
+  private firedTimelineRounds = new Set<number>();
 
   constructor(
     code: string,
@@ -59,12 +62,14 @@ export class TurnEngine {
     projectId: string,
     projectTitle: string,
     graph: GraphDocument,
+    timeline: TimelineRule[] = [],
   ) {
     this.code = code.toUpperCase();
     this.hostClientId = hostClientId;
     this.projectId = projectId;
     this.projectTitle = projectTitle;
     this.graph = graph;
+    this.timeline = timeline;
     this.seats.push({
       clientId: hostClientId,
       displayName: "Хост",
@@ -118,6 +123,9 @@ export class TurnEngine {
     const players = this.players();
     if (!players.length) return { ok: false as const, error: "Нужна роль" };
     const start = this.graph.startLocationId;
+    if (!this.graph.locations[start]) {
+      return { ok: false as const, error: "В графе нет стартовой локации" };
+    }
     for (const s of players) {
       this.locationOf.set(s.clientId, start);
       this.cluesOf.set(s.clientId, []);
@@ -126,10 +134,12 @@ export class TurnEngine {
       this.talkUsed.set(s.clientId, new Set());
     }
     this.flags = {};
+    this.firedTimelineRounds.clear();
     this.round = 1;
     this.phase = "planning";
     this.intents.clear();
     this.lastPublicEvent = "Дело открыто.";
+    this.fireTimelineForRound(1);
     this.emit();
     return { ok: true as const };
   }
@@ -169,6 +179,52 @@ export class TurnEngine {
     this.journalOf.set(clientId, list.slice(0, 40));
   }
 
+  /** Fire timeline rules scheduled for this round number (once). */
+  private fireTimelineForRound(round: number) {
+    if (this.firedTimelineRounds.has(round)) return;
+    const rules = this.timeline.filter((r) => r.atRound === round);
+    if (!rules.length) return;
+    this.firedTimelineRounds.add(round);
+
+    for (const rule of rules) {
+      this.setFlags(rule.setFlags);
+      if (rule.unlockLocationId) {
+        this.flags[`unlock_${rule.unlockLocationId}`] = true;
+      }
+
+      const targets =
+        rule.scope === "all"
+          ? this.players()
+          : rule.scope === "same_location"
+            ? this.players() // no anchor loc → treat as all for timeline
+            : this.players();
+
+      for (const s of targets) {
+        this.pushJournal(s.clientId, rule.title || `Ход ${round}`, rule.body || "");
+        if (rule.grantClue) this.addClue(s.clientId, rule.grantClue);
+        this.lastResultOf.set(
+          s.clientId,
+          rule.body || rule.title || `Событие раунда ${round}`,
+        );
+      }
+
+      if (rule.scope === "all" && (rule.body || rule.title)) {
+        this.shareBoard = [
+          {
+            id: newId(),
+            fromName: "Сценарий",
+            locationName: `Раунд ${round}`,
+            title: rule.title || `Ход ${round}`,
+            body: rule.body || "",
+            round,
+          },
+          ...this.shareBoard,
+        ].slice(0, 12);
+        this.lastPublicEvent = `Раунд ${round}: ${rule.title}`;
+      }
+    }
+  }
+
   private resolveRound() {
     const players = this.players();
     for (const s of players) {
@@ -198,8 +254,10 @@ export class TurnEngine {
       }
     }
     this.intents.clear();
+    const closed = this.round;
     this.round += 1;
-    this.lastPublicEvent = `Раунд ${this.round - 1} закрыт.`;
+    this.lastPublicEvent = `Раунд ${closed} закрыт.`;
+    this.fireTimelineForRound(this.round);
     this.emit();
   }
 
@@ -275,6 +333,17 @@ export class TurnEngine {
       { id: "wait", intent: { type: "wait" }, label: "Ничего не делать" },
     ];
     for (const e of availableExits(this.graph, loc, this.flags)) {
+      // Optional unlock gates: exit.to requires unlock_X flag if such location was gated
+      const unlockKey = `unlock_${e.to}`;
+      if (
+        Object.keys(this.flags).some((k) => k.startsWith("unlock_")) &&
+        this.graph.locations[e.to] &&
+        this.timeline.some((t) => t.unlockLocationId === e.to) &&
+        !this.flags[unlockKey]
+      ) {
+        // only gate if a timeline unlock exists for this loc and not yet unlocked
+        continue;
+      }
       opts.push({
         id: `move:${e.to}`,
         intent: { type: "move", toLocationId: e.to },
