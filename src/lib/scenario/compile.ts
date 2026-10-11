@@ -8,6 +8,7 @@ export type TimelineRule = {
   title: string;
   body: string;
   scope: "actor" | "same_location" | "all";
+  scopeLocationId?: string;
   setFlags?: string[];
   grantClue?: { id: string; title: string; body: string; source: string };
   unlockLocationId?: string;
@@ -41,7 +42,6 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
     };
   }
 
-  // Location → Location edges = exits
   for (const e of doc.edges) {
     const a = byId[e.from];
     const b = byId[e.to];
@@ -58,7 +58,6 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
     }
   }
 
-  // Attach inspect / npc children (edge from location → child, or child → location)
   for (const e of doc.edges) {
     const a = byId[e.from];
     const b = byId[e.to];
@@ -108,7 +107,6 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
     }
   }
 
-  // Start location: Start → Location edge, else first location
   let startLocationId = Object.keys(locations)[0] ?? "room_1";
   const startNode = doc.nodes.find((n) => n.kind === "start");
   if (startNode) {
@@ -117,7 +115,6 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
     if (target?.kind === "location") startLocationId = locIdOf(target);
   }
 
-  // Ensure at least one location
   if (Object.keys(locations).length === 0) {
     locations.room_1 = {
       id: "room_1",
@@ -129,8 +126,23 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
     startLocationId = "room_1";
   }
 
-  // Timeline → Event edges
   const timeline: TimelineRule[] = [];
+
+  // Primary: timeline ruler markers
+  for (const m of doc.timeline ?? []) {
+    timeline.push({
+      atRound: m.atRound,
+      title: m.title,
+      body: m.body,
+      scope: m.scope,
+      scopeLocationId: m.scopeLocationId,
+      setFlags: m.setFlags,
+      grantClue: m.grantClue,
+      unlockLocationId: m.unlockLocationId,
+    });
+  }
+
+  // Legacy: timeline nodes on graph
   for (const n of doc.nodes) {
     if (n.kind !== "timeline") continue;
     const atRound = n.data.atRound ?? 1;
@@ -140,7 +152,8 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
         atRound,
         title: n.data.title || `Ход ${atRound}`,
         body: n.data.body || n.data.description || "",
-        scope: "all",
+        scope: n.data.scope ?? "all",
+        scopeLocationId: n.data.scopeLocationId,
         setFlags: n.data.setFlags,
         grantClue: n.data.grantClue,
         unlockLocationId: n.data.unlockLocationId,
@@ -154,7 +167,8 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
         atRound,
         title: ev.data.title || n.data.title || `Ход ${atRound}`,
         body: ev.data.body || ev.data.description || "",
-        scope: ev.data.scope ?? "all",
+        scope: ev.data.scope ?? n.data.scope ?? "all",
+        scopeLocationId: ev.data.scopeLocationId ?? n.data.scopeLocationId,
         setFlags: ev.data.setFlags ?? n.data.setFlags,
         grantClue: ev.data.grantClue ?? n.data.grantClue,
         unlockLocationId: ev.data.unlockLocationId ?? n.data.unlockLocationId,

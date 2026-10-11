@@ -18,7 +18,6 @@ export type ScenarioPort = {
   kind?: "move" | "flow" | "data";
 };
 
-/** Object placed on a location scene stage (preview + future runtime hotspots). */
 export type SceneObject = {
   id: string;
   kind: "image" | "text" | "hotspot" | "npc" | "sound";
@@ -28,12 +27,24 @@ export type SceneObject = {
   h: number;
   label?: string;
   text?: string;
-  /** asset library id or direct url */
   assetId?: string;
   url?: string;
-  /** link to graph node for interaction */
   linkNodeId?: string;
   interaction?: "none" | "inspect" | "talk";
+};
+
+/** Marker on the top timeline ruler (preferred over timeline nodes). */
+export type TimelineMarker = {
+  id: string;
+  atRound: number;
+  title: string;
+  body: string;
+  scope: EventScope;
+  /** For scope=same_location — which locationId gets the popup */
+  scopeLocationId?: string;
+  setFlags?: string[];
+  grantClue?: { id: string; title: string; body: string; source: string; imageUrl?: string };
+  unlockLocationId?: string;
 };
 
 export type ScenarioNodeData = {
@@ -42,10 +53,11 @@ export type ScenarioNodeData = {
   background?: string;
   backgroundAssetId?: string;
   description?: string;
-  /** scene stage objects */
   sceneObjects?: SceneObject[];
   body?: string;
   scope?: EventScope;
+  /** Location for same_location scope */
+  scopeLocationId?: string;
   setFlags?: string[];
   grantClue?: { id: string; title: string; body: string; source: string; imageUrl?: string };
   unlockLocationId?: string;
@@ -99,8 +111,9 @@ export type ScenarioDocument = {
   nodes: ScenarioNode[];
   edges: ScenarioEdge[];
   initialFlags?: string[];
-  /** ids of assets used in this project (from global library) */
   assetIds?: string[];
+  /** Top ruler markers — primary timeline source */
+  timeline?: TimelineMarker[];
 };
 
 export const NODE_META: Record<
@@ -214,5 +227,14 @@ export function emptyScenario(title = "Новый сценарий"): ScenarioDo
       },
     ],
     assetIds: [],
+    timeline: [
+      {
+        id: `tm_${Math.random().toString(36).slice(2, 8)}`,
+        atRound: 5,
+        title: "Пример на 5-й ход",
+        body: "Замените текст или удалите маркер.",
+        scope: "all",
+      },
+    ],
   };
 }
