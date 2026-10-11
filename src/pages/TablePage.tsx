@@ -12,7 +12,6 @@ import {
 import { resolvePlayable } from "@/lib/scenario/resolve";
 import { TurnEngine } from "@/lib/turn-engine";
 import type { ActionIntent, TurnSnapshot } from "@/lib/turn-types";
-import { ROSTER } from "@/projects/roster";
 import QRCode from "qrcode";
 
 export function TablePage() {
@@ -54,6 +53,9 @@ export function TablePage() {
       pack.title,
       pack.graph,
       pack.timeline,
+      pack.characters,
+      pack.loreBaseId,
+      pack.playersMax,
     );
     engineRef.current = eng;
     setRoom(eng.snapshotFor(clientId));
@@ -153,6 +155,7 @@ export function TablePage() {
 
   const board = room.shareBoard[0];
   const topPopup = room.myPopups?.[0] ?? null;
+  const roles = room.characterOptions ?? [];
   const playUrl =
     hostPeerId &&
     `${typeof window !== "undefined" ? window.location.origin : ""}/play/${code.toUpperCase()}?h=${hostPeerId}`;
@@ -179,21 +182,11 @@ export function TablePage() {
           }}
         >
           <div>
-            <p
-              className="brass"
-              style={{
-                fontSize: 11,
-                letterSpacing: "0.2em",
-                textTransform: "uppercase",
-              }}
-            >
+            <p className="brass" style={{ fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase" }}>
               Хаб · {peerReady ? "сигнал online" : "ждём PeerJS…"} · гостей:{" "}
               {guestCount}
             </p>
-            <h1
-              className="font-display"
-              style={{ margin: "4px 0", color: "var(--paper)" }}
-            >
+            <h1 className="font-display" style={{ margin: "4px 0", color: "var(--paper)" }}>
               {room.projectTitle}
             </h1>
             <p className="muted">
@@ -202,17 +195,9 @@ export function TablePage() {
                 ? ` · раунд ${room.round} · ходы ${room.intentsReady}/${room.intentsNeeded}`
                 : " · лобби"}
             </p>
-            {room.lastPublicEvent ? (
-              <p className="faint" style={{ fontSize: 12 }}>
-                {room.lastPublicEvent}
-              </p>
-            ) : null}
             {err ? <p className="danger">{err}</p> : null}
             {playUrl ? (
-              <p
-                className="faint"
-                style={{ fontSize: 11, wordBreak: "break-all", maxWidth: 420 }}
-              >
+              <p className="faint" style={{ fontSize: 11, wordBreak: "break-all", maxWidth: 420 }}>
                 Ссылка: {playUrl}
               </p>
             ) : null}
@@ -220,24 +205,14 @@ export function TablePage() {
           {qr ? (
             <div className="card" style={{ textAlign: "center" }}>
               <img src={qr} alt="QR" width={180} height={180} />
-              <p className="faint" style={{ fontSize: 11 }}>
-                Сканируйте после «сигнал online»
-              </p>
             </div>
-          ) : (
-            <p className="muted">Готовим QR…</p>
-          )}
+          ) : null}
         </header>
 
         {board ? (
           <section className="card" style={{ marginTop: 20 }}>
-            <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
-              Share · {board.locationName} · {board.fromName}
-            </p>
-            <h2
-              className="font-display"
-              style={{ color: "var(--paper)", margin: "8px 0" }}
-            >
+            <p className="brass" style={{ fontSize: 11 }}>Share · {board.fromName}</p>
+            <h2 className="font-display" style={{ color: "var(--paper)" }}>
               {board.title}
             </h2>
             <p className="muted">{board.body}</p>
@@ -247,32 +222,47 @@ export function TablePage() {
         {room.status === "lobby" ? (
           <section className="card" style={{ marginTop: 20 }}>
             <h3 style={{ color: "var(--paper)" }}>1. Роль</h3>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-              {ROSTER.map((c) => (
-                <button
-                  key={c.id}
-                  type="button"
-                  className="btn"
-                  disabled={
-                    room.takenCharacterIds.includes(c.id) &&
-                    room.myCharacterId !== c.id
-                  }
-                  onClick={() => {
-                    engineRef.current?.claim(
-                      clientId,
-                      room.myCharacterId === c.id ? null : c.id,
-                    );
-                    pushAll();
-                  }}
-                  style={{
-                    borderColor:
-                      room.myCharacterId === c.id ? "var(--paper)" : undefined,
-                  }}
-                >
-                  {c.name}
-                </button>
-              ))}
-            </div>
+            {roles.length === 0 ? (
+              <p className="danger">
+                В сценарии нет персонажей. Откройте мастерскую → вкладка
+                «Персонажи».
+              </p>
+            ) : (
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+                {roles.map((c) => (
+                  <button
+                    key={c.id}
+                    type="button"
+                    className="btn"
+                    disabled={
+                      room.takenCharacterIds.includes(c.id) &&
+                      room.myCharacterId !== c.id
+                    }
+                    onClick={() => {
+                      engineRef.current?.claim(
+                        clientId,
+                        room.myCharacterId === c.id ? null : c.id,
+                      );
+                      pushAll();
+                    }}
+                    style={{
+                      borderColor:
+                        room.myCharacterId === c.id ? "var(--paper)" : undefined,
+                      height: "auto",
+                      padding: "10px 12px",
+                      textAlign: "left",
+                    }}
+                  >
+                    <div>{c.name}</div>
+                    {c.pathway ? (
+                      <div className="faint" style={{ fontSize: 11 }}>
+                        {c.pathway}
+                      </div>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            )}
             <button
               type="button"
               className="btn btn-primary"
@@ -286,75 +276,31 @@ export function TablePage() {
               }}
             >
               Начать дело
-              {!room.takenCharacterIds.length ? " (сначала роль)" : ""}
             </button>
           </section>
         ) : (
           <section style={{ marginTop: 20, display: "grid", gap: 12 }}>
-            <div
-              style={{
-                display: "grid",
-                gap: 12,
-                gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
-              }}
-            >
-              <div className="card">
-                <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
-                  За столом
-                </p>
-                <ul style={{ margin: "8px 0", paddingLeft: 18 }}>
-                  {room.seats
-                    .filter((s) => s.characterId)
-                    .map((s) => (
-                      <li key={s.clientId}>{s.displayName}</li>
-                    ))}
-                </ul>
-              </div>
-              <div className="card">
-                <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
-                  Share (только игроки)
-                </p>
-                {room.shareBoard.length === 0 ? (
-                  <p className="muted">Пока пусто</p>
-                ) : (
-                  room.shareBoard.map((s) => (
-                    <div key={s.id} style={{ marginTop: 8 }}>
-                      <div style={{ color: "var(--paper)" }}>{s.title}</div>
-                      <div className="faint" style={{ fontSize: 11 }}>
-                        {s.fromName} · {s.locationName}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-
             {room.myCharacterId ? (
               <div className="card">
-                <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
-                  Ваш ход (ПК) · {room.myLocationName}
+                <p className="brass" style={{ fontSize: 11 }}>
+                  Ваш ход · {room.myLocationName}
                 </p>
                 {room.lastResult ? (
-                  <p className="muted" style={{ fontSize: 14 }}>
-                    {room.lastResult}
-                  </p>
+                  <p className="muted">{room.lastResult}</p>
                 ) : null}
                 {room.myIntent ? (
-                  <div>
-                    <p className="brass">Ход сдан</p>
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => {
-                        engineRef.current?.clearIntent(clientId);
-                        pushAll();
-                      }}
-                    >
-                      Отменить
-                    </button>
-                  </div>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      engineRef.current?.clearIntent(clientId);
+                      pushAll();
+                    }}
+                  >
+                    Отменить ход
+                  </button>
                 ) : (
-                  <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                  <div style={{ display: "grid", gap: 8 }}>
                     {room.availableActions.map((a) => (
                       <button
                         key={a.id}
@@ -370,6 +316,11 @@ export function TablePage() {
                         }}
                       >
                         <div style={{ color: "var(--paper)" }}>{a.label}</div>
+                        {a.detail ? (
+                          <div className="faint" style={{ fontSize: 11 }}>
+                            {a.detail}
+                          </div>
+                        ) : null}
                       </button>
                     ))}
                   </div>
@@ -379,7 +330,7 @@ export function TablePage() {
           </section>
         )}
 
-        <p className="faint" style={{ marginTop: 24, fontSize: 12 }}>
+        <p className="faint" style={{ marginTop: 24 }}>
           <Link to="/">← Сценарии</Link>
         </p>
       </main>
