@@ -19,6 +19,11 @@ export function ProjectPage() {
   }
 
   const locCount = Object.keys(pack.graph.locations).length;
+  const title = stored?.manifest.title || pack.title;
+  const subtitle = stored?.manifest.subtitle;
+  const blurb =
+    stored?.manifest.blurb ||
+    "Сценарий из мастерской. Пошаговые ходы, личные и общие события.";
   const cover =
     stored?.manifest.coverImage ||
     Object.values(pack.graph.locations).find((l) => l.image)?.image;
@@ -54,15 +59,20 @@ export function ProjectPage() {
         <Link to="/" className="faint" style={{ fontSize: 12 }}>
           ← Сценарии
         </Link>
+        {subtitle ? (
+          <p className="brass" style={{ fontSize: 11, letterSpacing: "0.14em" }}>
+            {subtitle}
+          </p>
+        ) : null}
         <h1 className="font-display" style={{ fontSize: 40, color: "var(--paper)" }}>
-          {pack.title}
+          {title}
         </h1>
-        <p className="muted">
-          {stored?.manifest.blurb ||
-            "Сценарий из мастерской. Пошаговые ходы, личные и общие события."}
-        </p>
+        <p className="muted">{blurb}</p>
         <p className="faint" style={{ fontSize: 13 }}>
-          Локаций: {locCount} · timeline-событий: {pack.timeline.length}
+          Локаций: {locCount} · timeline: {pack.timeline.length}
+          {stored?.manifest.playersMin != null
+            ? ` · ${stored.manifest.playersMin}–${stored.manifest.playersMax} игр.`
+            : ""}
         </p>
         <button
           type="button"

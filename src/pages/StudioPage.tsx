@@ -5,6 +5,7 @@ import { CharactersPanel } from "@/components/CharactersPanel";
 import { FloatingScene } from "@/components/FloatingScene";
 import { LoreDrawer } from "@/components/LoreDrawer";
 import { NodeCanvas } from "@/components/NodeCanvas";
+import { PreviewPanel } from "@/components/PreviewPanel";
 import { SceneStage } from "@/components/SceneStage";
 import { TimelineStrip } from "@/components/TimelineStrip";
 import {
@@ -14,7 +15,14 @@ import {
 } from "@/lib/scenario/store";
 import type { ScenarioDocument } from "@/lib/scenario/types";
 
-type Tab = "plan" | "scene" | "characters";
+type Tab = "preview" | "plan" | "scene" | "characters";
+
+const TAB_LABEL: Record<Tab, string> = {
+  preview: "Превью",
+  plan: "План",
+  scene: "Сцена",
+  characters: "Персонажи",
+};
 
 export function StudioPage() {
   const { projectId = "" } = useParams();
@@ -71,12 +79,16 @@ export function StudioPage() {
           onChange={(e) =>
             onChange({
               ...doc,
-              manifest: { ...doc.manifest, title: e.target.value },
+              manifest: {
+                ...doc.manifest,
+                title: e.target.value,
+                updatedAt: new Date().toISOString(),
+              },
             })
           }
           style={{
             flex: 1,
-            minWidth: 120,
+            minWidth: 100,
             background: "transparent",
             border: "none",
             color: "var(--paper)",
@@ -84,7 +96,7 @@ export function StudioPage() {
             fontSize: 22,
           }}
         />
-        {(["plan", "scene", "characters"] as Tab[]).map((t) => (
+        {(["preview", "plan", "scene", "characters"] as Tab[]).map((t) => (
           <button
             key={t}
             type="button"
@@ -96,7 +108,7 @@ export function StudioPage() {
             }}
             onClick={() => setTab(t)}
           >
-            {t === "plan" ? "План" : t === "scene" ? "Сцена" : "Персонажи"}
+            {TAB_LABEL[t]}
           </button>
         ))}
         {tab === "plan" ? (
@@ -108,7 +120,7 @@ export function StudioPage() {
               fontSize: 12,
               borderColor: loreOpen ? "var(--brass)" : undefined,
             }}
-            title="Базы лора и способности"
+            title="Базы лора"
             onClick={() => setLoreOpen((v) => !v)}
           >
             ✦ Лор
@@ -151,7 +163,19 @@ export function StudioPage() {
       </header>
 
       <div style={{ flex: 1, minHeight: 0, display: "flex", position: "relative" }}>
-        <div style={{ flex: 1, minWidth: 0, minHeight: 0, display: "flex", flexDirection: "column" }}>
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            minHeight: 0,
+            display: "flex",
+            flexDirection: "column",
+          }}
+        >
+          {tab === "preview" ? (
+            <PreviewPanel doc={doc} onChange={onChange} />
+          ) : null}
+
           {tab === "plan" ? (
             <>
               <TimelineStrip doc={doc} onChange={onChange} />
