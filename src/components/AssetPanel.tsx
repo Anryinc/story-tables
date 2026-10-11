@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type CSSProperties } from "react";
 import {
   addAssetFromFile,
   addAssetFromUrl,
@@ -52,14 +52,12 @@ export function AssetPanel({
           }}
         />
       </label>
-      <div style={{ display: "flex", gap: 4 }}>
-        <input
-          placeholder="Имя"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          style={inputStyle}
-        />
-      </div>
+      <input
+        placeholder="Имя"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        style={inputStyle}
+      />
       <input
         placeholder="https://… картинка или звук"
         value={url}
@@ -112,7 +110,9 @@ export function AssetPanel({
                   {m.kind} · {m.mime || "url"}
                 </div>
               )}
-              <div style={{ fontSize: 12, color: "var(--paper)", marginTop: 4 }}>{m.name}</div>
+              <div style={{ fontSize: 12, color: "var(--paper)", marginTop: 4 }}>
+                {m.name}
+              </div>
               <button
                 type="button"
                 className="btn"
@@ -133,7 +133,7 @@ export function AssetPanel({
   );
 }
 
-const inputStyle: React.CSSProperties = {
+const inputStyle: CSSProperties = {
   width: "100%",
   background: "#0c0b0a",
   border: "1px solid var(--line)",

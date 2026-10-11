@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { DataConnection } from "peerjs";
+import { PopupModal } from "@/components/PopupModal";
 import { getClientId } from "@/lib/ids";
 import {
   makeHostPeerId,
@@ -103,6 +104,8 @@ export function TablePage() {
         result = { t: "actionResult", ok: r.ok, error: r.error };
       } else if (msg.t === "clearIntent") {
         eng.clearIntent(msg.clientId);
+      } else if (msg.t === "dismissPopup") {
+        eng.dismissPopup(msg.clientId, msg.popupId);
       }
       try {
         conn.send(result);
@@ -121,13 +124,14 @@ export function TablePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, clientId, pack]);
 
-  // QR must include host peer id
   useEffect(() => {
     if (!hostPeerId || !code) return;
     const playUrl = `${window.location.origin}/play/${code.toUpperCase()}?h=${encodeURIComponent(hostPeerId)}`;
-    void QRCode.toDataURL(playUrl, { width: 220, margin: 1, color: { dark: "#e8e2d6", light: "#0c0b0a" } }).then(
-      setQr,
-    );
+    void QRCode.toDataURL(playUrl, {
+      width: 220,
+      margin: 1,
+      color: { dark: "#e8e2d6", light: "#0c0b0a" },
+    }).then(setQr);
   }, [hostPeerId, code]);
 
   if (!pack) {
@@ -148,231 +152,237 @@ export function TablePage() {
   }
 
   const board = room.shareBoard[0];
+  const topPopup = room.myPopups?.[0] ?? null;
   const playUrl =
     hostPeerId &&
     `${typeof window !== "undefined" ? window.location.origin : ""}/play/${code.toUpperCase()}?h=${hostPeerId}`;
 
   return (
-    <main style={{ maxWidth: 920, margin: "0 auto", padding: 20 }}>
-      <header style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
-        <div>
-          <p className="brass" style={{ fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase" }}>
-            Хаб · {peerReady ? "сигнал online" : "ждём PeerJS…"} · гостей:{" "}
-            {guestCount}
-          </p>
-          <h1 className="font-display" style={{ margin: "4px 0", color: "var(--paper)" }}>
-            {room.projectTitle}
-          </h1>
-          <p className="muted">
-            Код <strong style={{ color: "var(--paper)" }}>{room.code}</strong>
-            {room.status === "playing"
-              ? ` · раунд ${room.round} · ходы ${room.intentsReady}/${room.intentsNeeded}`
-              : " · лобби"}
-          </p>
-          {room.lastPublicEvent ? (
-            <p className="faint" style={{ fontSize: 12 }}>
-              {room.lastPublicEvent}
-            </p>
-          ) : null}
-          {err ? <p className="danger">{err}</p> : null}
-          {playUrl ? (
-            <p className="faint" style={{ fontSize: 11, wordBreak: "break-all", maxWidth: 420 }}>
-              Ссылка для телефона: {playUrl}
-            </p>
-          ) : null}
-        </div>
-        {qr ? (
-          <div className="card" style={{ textAlign: "center" }}>
-            <img src={qr} alt="QR" width={180} height={180} />
-            <p className="faint" style={{ fontSize: 11 }}>
-              Сканируйте после «сигнал online»
-            </p>
-          </div>
-        ) : (
-          <p className="muted">Готовим QR…</p>
-        )}
-      </header>
-
-      {board ? (
-        <section className="card" style={{ marginTop: 20 }}>
-          <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
-            На экране · {board.locationName} · {board.fromName}
-          </p>
-          <h2 className="font-display" style={{ color: "var(--paper)", margin: "8px 0" }}>
-            {board.title}
-          </h2>
-          <p className="muted">{board.body}</p>
-        </section>
+    <>
+      {topPopup ? (
+        <PopupModal
+          popup={topPopup}
+          onDismiss={() => {
+            engineRef.current?.dismissPopup(clientId, topPopup.id);
+            pushAll();
+          }}
+        />
       ) : null}
 
-      {room.status === "lobby" ? (
-        <section className="card" style={{ marginTop: 20 }}>
-          <h3 style={{ color: "var(--paper)" }}>1. Роль (на ПК или на телефоне)</h3>
-          <p className="muted" style={{ fontSize: 13 }}>
-            Нужна хотя бы одна роль за столом. Можно взять на этом ПК или на
-            телефоне по QR.
-          </p>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
-            {ROSTER.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className="btn"
-                disabled={room.takenCharacterIds.includes(c.id) && room.myCharacterId !== c.id}
-                onClick={() => {
-                  engineRef.current?.claim(
-                    clientId,
-                    room.myCharacterId === c.id ? null : c.id,
-                  );
-                  pushAll();
-                }}
-                style={{
-                  borderColor:
-                    room.myCharacterId === c.id ? "var(--paper)" : undefined,
-                }}
+      <main style={{ maxWidth: 920, margin: "0 auto", padding: 20 }}>
+        <header
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+          }}
+        >
+          <div>
+            <p
+              className="brass"
+              style={{
+                fontSize: 11,
+                letterSpacing: "0.2em",
+                textTransform: "uppercase",
+              }}
+            >
+              Хаб · {peerReady ? "сигнал online" : "ждём PeerJS…"} · гостей:{" "}
+              {guestCount}
+            </p>
+            <h1
+              className="font-display"
+              style={{ margin: "4px 0", color: "var(--paper)" }}
+            >
+              {room.projectTitle}
+            </h1>
+            <p className="muted">
+              Код <strong style={{ color: "var(--paper)" }}>{room.code}</strong>
+              {room.status === "playing"
+                ? ` · раунд ${room.round} · ходы ${room.intentsReady}/${room.intentsNeeded}`
+                : " · лобби"}
+            </p>
+            {room.lastPublicEvent ? (
+              <p className="faint" style={{ fontSize: 12 }}>
+                {room.lastPublicEvent}
+              </p>
+            ) : null}
+            {err ? <p className="danger">{err}</p> : null}
+            {playUrl ? (
+              <p
+                className="faint"
+                style={{ fontSize: 11, wordBreak: "break-all", maxWidth: 420 }}
               >
-                {c.name}
-                {room.takenCharacterIds.includes(c.id) && room.myCharacterId !== c.id
-                  ? " ✓"
-                  : ""}
-              </button>
-            ))}
-          </div>
-          <h3 style={{ color: "var(--paper)", marginTop: 20 }}>2. Старт</h3>
-          <button
-            type="button"
-            className="btn btn-primary"
-            style={{ width: "100%" }}
-            disabled={!room.takenCharacterIds.length}
-            onClick={() => {
-              const r = engineRef.current?.start(clientId);
-              if (r && !r.ok) setErr(r.error ?? "Ошибка");
-              else setErr(null);
-              pushAll();
-            }}
-          >
-            Начать дело
-            {!room.takenCharacterIds.length ? " (сначала роль)" : ""}
-          </button>
-        </section>
-      ) : (
-        <section style={{ marginTop: 20, display: "grid", gap: 12 }}>
-          <div
-            style={{
-              display: "grid",
-              gap: 12,
-              gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
-            }}
-          >
-            <div className="card">
-              <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
-                За столом
+                Ссылка: {playUrl}
               </p>
-              <ul style={{ margin: "8px 0", paddingLeft: 18 }}>
-                {room.seats
-                  .filter((s) => s.characterId)
-                  .map((s) => (
-                    <li key={s.clientId}>{s.displayName}</li>
-                  ))}
-              </ul>
-            </div>
-            <div className="card">
-              <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
-                Share
-              </p>
-              {room.shareBoard.length === 0 ? (
-                <p className="muted">Пока пусто</p>
-              ) : (
-                room.shareBoard.map((s) => (
-                  <div key={s.id} style={{ marginTop: 8 }}>
-                    <div style={{ color: "var(--paper)" }}>{s.title}</div>
-                    <div className="faint" style={{ fontSize: 11 }}>
-                      {s.fromName} · {s.locationName}
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
+            ) : null}
           </div>
+          {qr ? (
+            <div className="card" style={{ textAlign: "center" }}>
+              <img src={qr} alt="QR" width={180} height={180} />
+              <p className="faint" style={{ fontSize: 11 }}>
+                Сканируйте после «сигнал online»
+              </p>
+            </div>
+          ) : (
+            <p className="muted">Готовим QR…</p>
+          )}
+        </header>
 
-          {/* Host plays on PC if they claimed a role */}
-          {room.myCharacterId ? (
-            <div className="card">
-              <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
-                Ваш ход (ПК) · {room.myLocationName}
-              </p>
-              {room.lastResult ? (
-                <p className="muted" style={{ fontSize: 14 }}>
-                  {room.lastResult}
+        {board ? (
+          <section className="card" style={{ marginTop: 20 }}>
+            <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
+              Share · {board.locationName} · {board.fromName}
+            </p>
+            <h2
+              className="font-display"
+              style={{ color: "var(--paper)", margin: "8px 0" }}
+            >
+              {board.title}
+            </h2>
+            <p className="muted">{board.body}</p>
+          </section>
+        ) : null}
+
+        {room.status === "lobby" ? (
+          <section className="card" style={{ marginTop: 20 }}>
+            <h3 style={{ color: "var(--paper)" }}>1. Роль</h3>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+              {ROSTER.map((c) => (
+                <button
+                  key={c.id}
+                  type="button"
+                  className="btn"
+                  disabled={
+                    room.takenCharacterIds.includes(c.id) &&
+                    room.myCharacterId !== c.id
+                  }
+                  onClick={() => {
+                    engineRef.current?.claim(
+                      clientId,
+                      room.myCharacterId === c.id ? null : c.id,
+                    );
+                    pushAll();
+                  }}
+                  style={{
+                    borderColor:
+                      room.myCharacterId === c.id ? "var(--paper)" : undefined,
+                  }}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ width: "100%", marginTop: 16 }}
+              disabled={!room.takenCharacterIds.length}
+              onClick={() => {
+                const r = engineRef.current?.start(clientId);
+                if (r && !r.ok) setErr(r.error ?? "Ошибка");
+                else setErr(null);
+                pushAll();
+              }}
+            >
+              Начать дело
+              {!room.takenCharacterIds.length ? " (сначала роль)" : ""}
+            </button>
+          </section>
+        ) : (
+          <section style={{ marginTop: 20, display: "grid", gap: 12 }}>
+            <div
+              style={{
+                display: "grid",
+                gap: 12,
+                gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
+              }}
+            >
+              <div className="card">
+                <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
+                  За столом
                 </p>
-              ) : null}
-              {room.myIntent ? (
-                <div>
-                  <p className="brass">Ход сдан — ждём остальных</p>
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => {
-                      engineRef.current?.clearIntent(clientId);
-                      pushAll();
-                    }}
-                  >
-                    Отменить
-                  </button>
-                </div>
-              ) : (
-                <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
-                  {room.availableActions.map((a) => (
+                <ul style={{ margin: "8px 0", paddingLeft: 18 }}>
+                  {room.seats
+                    .filter((s) => s.characterId)
+                    .map((s) => (
+                      <li key={s.clientId}>{s.displayName}</li>
+                    ))}
+                </ul>
+              </div>
+              <div className="card">
+                <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
+                  Share (только игроки)
+                </p>
+                {room.shareBoard.length === 0 ? (
+                  <p className="muted">Пока пусто</p>
+                ) : (
+                  room.shareBoard.map((s) => (
+                    <div key={s.id} style={{ marginTop: 8 }}>
+                      <div style={{ color: "var(--paper)" }}>{s.title}</div>
+                      <div className="faint" style={{ fontSize: 11 }}>
+                        {s.fromName} · {s.locationName}
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {room.myCharacterId ? (
+              <div className="card">
+                <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
+                  Ваш ход (ПК) · {room.myLocationName}
+                </p>
+                {room.lastResult ? (
+                  <p className="muted" style={{ fontSize: 14 }}>
+                    {room.lastResult}
+                  </p>
+                ) : null}
+                {room.myIntent ? (
+                  <div>
+                    <p className="brass">Ход сдан</p>
                     <button
-                      key={a.id}
                       type="button"
                       className="btn"
-                      style={{ height: "auto", padding: 12, textAlign: "left" }}
                       onClick={() => {
-                        engineRef.current?.submitIntent(
-                          clientId,
-                          a.intent as ActionIntent,
-                        );
+                        engineRef.current?.clearIntent(clientId);
                         pushAll();
                       }}
                     >
-                      <div style={{ color: "var(--paper)" }}>{a.label}</div>
-                      {a.detail ? (
-                        <div className="faint" style={{ fontSize: 11 }}>
-                          {a.detail}
-                        </div>
-                      ) : null}
+                      Отменить
                     </button>
-                  ))}
-                </div>
-              )}
-              <h4 style={{ marginTop: 16, color: "var(--brass)", fontSize: 12 }}>
-                Улики
-              </h4>
-              {room.myClues.length === 0 ? (
-                <p className="muted">Пока пусто</p>
-              ) : (
-                room.myClues.map((c) => (
-                  <div key={c.id} style={{ marginTop: 6 }}>
-                    <div style={{ color: "var(--paper)" }}>{c.title}</div>
-                    <div className="muted" style={{ fontSize: 13 }}>
-                      {c.body}
-                    </div>
                   </div>
-                ))
-              )}
-            </div>
-          ) : (
-            <p className="muted">
-              На этом ПК роли нет — играйте с телефона по QR.
-            </p>
-          )}
-        </section>
-      )}
+                ) : (
+                  <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                    {room.availableActions.map((a) => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        className="btn"
+                        style={{ height: "auto", padding: 12, textAlign: "left" }}
+                        onClick={() => {
+                          engineRef.current?.submitIntent(
+                            clientId,
+                            a.intent as ActionIntent,
+                          );
+                          pushAll();
+                        }}
+                      >
+                        <div style={{ color: "var(--paper)" }}>{a.label}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : null}
+          </section>
+        )}
 
-      <p className="faint" style={{ marginTop: 24, fontSize: 12 }}>
-        <Link to="/">← Сценарии</Link>
-      </p>
-    </main>
+        <p className="faint" style={{ marginTop: 24, fontSize: 12 }}>
+          <Link to="/">← Сценарии</Link>
+        </p>
+      </main>
+    </>
   );
 }
