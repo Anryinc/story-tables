@@ -14,40 +14,131 @@ export type HostMsg =
   | { t: "snapshot"; room: TurnSnapshot }
   | { t: "actionResult"; ok: boolean; error?: string };
 
-export function hostPeerId(code: string) {
-  return `storytables-host-${code.toUpperCase()}`;
+const PEER_OPTS = {
+  debug: 1 as const,
+  // public PeerJS cloud
+  host: "0.peerjs.com",
+  port: 443,
+  path: "/",
+  secure: true,
+  config: {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:global.stun.twilio.com:3478" },
+    ],
+  },
+};
+
+/** Random host peer id — put in QR so guests never hit a stale fixed id. */
+export function makeHostPeerId(code: string) {
+  const suffix = Math.random().toString(36).slice(2, 8);
+  return `st-${code.toLowerCase()}-${suffix}`;
 }
 
 export function openHostPeer(
-  code: string,
+  peerId: string,
   onGuest: (conn: DataConnection, msg: GuestMsg) => void,
+  onReady?: (id: string) => void,
+  onError?: (err: string) => void,
 ): Peer {
-  const peer = new Peer(hostPeerId(code), { debug: 1 });
+  const peer = new Peer(peerId, PEER_OPTS);
+
+  peer.on("open", (id) => {
+    onReady?.(id);
+  });
+
+  peer.on("error", (err) => {
+    onError?.(String(err.type || err.message || err));
+  });
+
   peer.on("connection", (conn) => {
+    conn.on("open", () => {
+      // Guest may send hello immediately after open
+    });
     conn.on("data", (raw) => {
       const msg = raw as GuestMsg;
       if (msg && typeof msg === "object" && "t" in msg) onGuest(conn, msg);
     });
+    conn.on("close", () => {
+      /* guest left */
+    });
   });
+
   return peer;
 }
 
 export function openGuestPeer(
-  code: string,
+  hostPeerId: string,
   onHost: (msg: HostMsg) => void,
+  onStatus?: (s: string) => void,
 ): { peer: Peer; whenReady: Promise<DataConnection> } {
-  const peer = new Peer({ debug: 1 });
+  const peer = new Peer(PEER_OPTS);
+
   const whenReady = new Promise<DataConnection>((resolve, reject) => {
+    let settled = false;
+
+    const fail = (e: unknown) => {
+      if (settled) return;
+      settled = true;
+      reject(e);
+    };
+
+    const tryConnect = () => {
+      onStatus?.(`Подключаюсь к хосту…`);
+      const conn = peer.connect(hostPeerId, { reliable: true });
+
+      const t = window.setTimeout(() => {
+        if (!settled) {
+          onStatus?.("Таймаут канала, повтор…");
+          try {
+            conn.close();
+          } catch {
+            /* */
+          }
+          // one more attempt
+          const conn2 = peer.connect(hostPeerId, { reliable: true });
+          wire(conn2);
+        }
+      }, 8000);
+
+      const wire = (c: DataConnection) => {
+        c.on("open", () => {
+          if (settled) return;
+          settled = true;
+          window.clearTimeout(t);
+          onStatus?.("Связь с хостом есть");
+          resolve(c);
+        });
+        c.on("data", (raw) => {
+          const msg = raw as HostMsg;
+          if (msg && typeof msg === "object" && "t" in msg) onHost(msg);
+        });
+        c.on("error", (e) => {
+          onStatus?.(`Ошибка канала: ${String(e)}`);
+        });
+      };
+
+      wire(conn);
+    };
+
     peer.on("open", () => {
-      const conn = peer.connect(hostPeerId(code), { reliable: true });
-      conn.on("open", () => resolve(conn));
-      conn.on("error", reject);
-      conn.on("data", (raw) => {
-        const msg = raw as HostMsg;
-        if (msg && typeof msg === "object" && "t" in msg) onHost(msg);
-      });
+      onStatus?.(`Peer id ${peer.id}`);
+      tryConnect();
     });
-    peer.on("error", reject);
+
+    peer.on("error", (err) => {
+      onStatus?.(`Peer error: ${err.type}`);
+      // peer-unavailable means host not up yet — retry from outside
+      if (err.type === "peer-unavailable") {
+        onStatus?.("Хост ещё не в сети, повтор через 2с…");
+        window.setTimeout(() => {
+          if (!settled && peer.open) tryConnect();
+        }, 2000);
+        return;
+      }
+      fail(err);
+    });
   });
+
   return { peer, whenReady };
 }

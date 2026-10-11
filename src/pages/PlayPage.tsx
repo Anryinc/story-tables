@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import type { DataConnection } from "peerjs";
 import { getClientId } from "@/lib/ids";
 import { openGuestPeer, type GuestMsg } from "@/lib/p2p";
@@ -8,60 +8,130 @@ import { ROSTER } from "@/projects/roster";
 
 export function PlayPage() {
   const { code = "" } = useParams();
+  const [params] = useSearchParams();
+  const hostPeerId = params.get("h") || params.get("host") || "";
   const clientId = useMemo(() => getClientId(), []);
   const connRef = useRef<DataConnection | null>(null);
+  const connectedRef = useRef(false);
   const [room, setRoom] = useState<TurnSnapshot | null>(null);
+  const [status, setStatus] = useState("Инициализация…");
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [retryKey, setRetryKey] = useState(0);
 
   const send = (msg: GuestMsg) => {
-    connRef.current?.send(msg);
+    const c = connRef.current;
+    if (!c || !c.open) {
+      setActionError("Нет связи с хостом");
+      return;
+    }
+    try {
+      c.send(msg);
+    } catch (e) {
+      setActionError(String(e));
+    }
   };
 
   useEffect(() => {
     if (!code) return;
+    if (!hostPeerId) {
+      setError(
+        "В ссылке нет id хоста. Откройте QR с экрана стола (не старую закладку) — в URL должен быть ?h=…",
+      );
+      return;
+    }
+
     let cancelled = false;
-    const { peer, whenReady } = openGuestPeer(code, (msg) => {
-      if (msg.t === "snapshot") setRoom(msg.room);
-      if (msg.t === "actionResult" && !msg.ok) setActionError(msg.error ?? "Ошибка");
-      if (msg.t === "actionResult" && msg.ok) setActionError(null);
-    });
+    connectedRef.current = false;
+    setError(null);
+    setStatus("Подключение к PeerJS…");
+
+    const { peer, whenReady } = openGuestPeer(
+      hostPeerId,
+      (msg) => {
+        if (msg.t === "snapshot") setRoom(msg.room);
+        if (msg.t === "actionResult" && !msg.ok)
+          setActionError(msg.error ?? "Ошибка");
+        if (msg.t === "actionResult" && msg.ok) setActionError(null);
+      },
+      (s) => {
+        if (!cancelled) setStatus(s);
+      },
+    );
+
     whenReady
       .then((conn) => {
         if (cancelled) return;
         connRef.current = conn;
-        send({ t: "hello", clientId, displayName: "Игрок" });
+        connectedRef.current = true;
+        setStatus("Связь есть");
+        conn.send({
+          t: "hello",
+          clientId,
+          displayName: "Игрок",
+        } satisfies GuestMsg);
       })
       .catch((e) => {
-        if (!cancelled) setError(String(e));
+        if (!cancelled) setError(String(e?.type || e?.message || e));
       });
-    const hang = setTimeout(() => {
-      if (!cancelled && !room) {
-        setError((e) => e ?? "Ждём хоста. Откройте стол на ПК с тем же кодом.");
+
+    const hang = window.setTimeout(() => {
+      if (!cancelled && !connectedRef.current) {
+        setError(
+          (prev) =>
+            prev ??
+            "Не удалось связаться с хостом. Проверьте: стол открыт на ПК, статус «сигнал online», QR свежий (с ?h=).",
+        );
       }
-    }, 10000);
+    }, 20000);
+
     return () => {
       cancelled = true;
-      clearTimeout(hang);
+      window.clearTimeout(hang);
       peer.destroy();
+      connRef.current = null;
     };
-  }, [code, clientId]);
+  }, [code, clientId, hostPeerId, retryKey]);
 
-  if (error && !room) {
+  if (!hostPeerId || (error && !room)) {
     return (
       <main style={{ padding: 32, textAlign: "center" }}>
         <h1 className="font-display">Стол</h1>
-        <p className="muted">{error}</p>
+        <p className="muted">{error || "Нет id хоста"}</p>
         <p className="faint">Код {code.toUpperCase()}</p>
-        <Link to="/">Хаб</Link>
+        <p className="faint" style={{ fontSize: 12 }}>
+          {status}
+        </p>
+        <button
+          type="button"
+          className="btn btn-primary"
+          style={{ marginTop: 16 }}
+          onClick={() => {
+            setError(null);
+            setRetryKey((k) => k + 1);
+          }}
+        >
+          Повторить
+        </button>
+        <div style={{ marginTop: 12 }}>
+          <Link to="/">Хаб</Link>
+        </div>
       </main>
     );
   }
 
   if (!room) {
     return (
-      <main style={{ padding: 32, textAlign: "center" }} className="font-display">
-        Садимся за стол…
+      <main style={{ padding: 32, textAlign: "center" }}>
+        <p className="font-display" style={{ fontSize: 28 }}>
+          Садимся за стол…
+        </p>
+        <p className="muted" style={{ fontSize: 13 }}>
+          {status}
+        </p>
+        <p className="faint" style={{ fontSize: 11 }}>
+          h={hostPeerId.slice(0, 24)}…
+        </p>
       </main>
     );
   }
@@ -107,9 +177,10 @@ export function PlayPage() {
         </div>
         {room.myCharacterId ? (
           <p className="muted" style={{ marginTop: 16 }}>
-            Ждём старта на хабе (ПК).
+            Ждём «Начать дело» на ПК.
           </p>
         ) : null}
+        {actionError ? <p className="danger">{actionError}</p> : null}
       </main>
     );
   }
@@ -162,9 +233,9 @@ export function PlayPage() {
               type="button"
               className="btn"
               style={{ height: "auto", padding: "12px", textAlign: "left" }}
-              onClick={() => {
-                send({ t: "intent", clientId, intent: a.intent as ActionIntent });
-              }}
+              onClick={() =>
+                send({ t: "intent", clientId, intent: a.intent as ActionIntent })
+              }
             >
               <div style={{ color: "var(--paper)" }}>{a.label}</div>
               {a.detail ? (

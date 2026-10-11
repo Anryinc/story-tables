@@ -2,10 +2,15 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import type { DataConnection } from "peerjs";
 import { getClientId } from "@/lib/ids";
-import { openHostPeer, type GuestMsg, type HostMsg } from "@/lib/p2p";
+import {
+  makeHostPeerId,
+  openHostPeer,
+  type GuestMsg,
+  type HostMsg,
+} from "@/lib/p2p";
 import { resolvePlayable } from "@/lib/scenario/resolve";
 import { TurnEngine } from "@/lib/turn-engine";
-import type { TurnSnapshot } from "@/lib/turn-types";
+import type { ActionIntent, TurnSnapshot } from "@/lib/turn-types";
 import { ROSTER } from "@/projects/roster";
 import QRCode from "qrcode";
 
@@ -17,7 +22,9 @@ export function TablePage() {
   const engineRef = useRef<TurnEngine | null>(null);
   const connsRef = useRef<Map<string, DataConnection>>(new Map());
   const [room, setRoom] = useState<TurnSnapshot | null>(null);
+  const [hostPeerId, setHostPeerId] = useState<string | null>(null);
   const [peerReady, setPeerReady] = useState(false);
+  const [guestCount, setGuestCount] = useState(0);
   const [qr, setQr] = useState("");
   const [err, setErr] = useState<string | null>(null);
 
@@ -26,13 +33,19 @@ export function TablePage() {
     if (!eng) return;
     setRoom(eng.snapshotFor(clientId));
     for (const [guestId, conn] of connsRef.current) {
+      if (!conn.open) continue;
       const msg: HostMsg = { t: "snapshot", room: eng.snapshotFor(guestId) };
-      if (conn.open) conn.send(msg);
+      try {
+        conn.send(msg);
+      } catch {
+        /* */
+      }
     }
   };
 
   useEffect(() => {
     if (!pack || !code) return;
+
     const eng = new TurnEngine(
       code,
       clientId,
@@ -43,25 +56,41 @@ export function TablePage() {
     );
     engineRef.current = eng;
     setRoom(eng.snapshotFor(clientId));
-    const unsub = eng.subscribe(pushAll);
+    const unsub = eng.subscribe(() => pushAll());
 
-    const peer = openHostPeer(code, (conn, msg) => handleGuest(conn, msg));
-    peer.on("open", () => setPeerReady(true));
-    peer.on("error", (e) => setErr(String(e)));
+    const peerId = makeHostPeerId(code);
+    setHostPeerId(peerId);
 
-    const playUrl = `${window.location.origin}/play/${code.toUpperCase()}`;
-    void QRCode.toDataURL(playUrl, { width: 200, margin: 1 }).then(setQr);
+    const peer = openHostPeer(
+      peerId,
+      (conn, msg) => handleGuest(conn, msg),
+      (id) => {
+        setPeerReady(true);
+        setHostPeerId(id);
+      },
+      (e) => setErr(`PeerJS: ${e}`),
+    );
 
     function handleGuest(conn: DataConnection, msg: GuestMsg) {
       const eng = engineRef.current;
       if (!eng) return;
+
       if (msg.t === "hello") {
         connsRef.current.set(msg.clientId, conn);
+        setGuestCount(connsRef.current.size);
         eng.ensureSeat(msg.clientId, msg.displayName);
-        conn.send({ t: "snapshot", room: eng.snapshotFor(msg.clientId) } satisfies HostMsg);
+        try {
+          conn.send({
+            t: "snapshot",
+            room: eng.snapshotFor(msg.clientId),
+          } satisfies HostMsg);
+        } catch {
+          /* */
+        }
         pushAll();
         return;
       }
+
       let result: HostMsg = { t: "actionResult", ok: true };
       if (msg.t === "claim") {
         const r = eng.claim(msg.clientId, msg.characterId);
@@ -75,7 +104,11 @@ export function TablePage() {
       } else if (msg.t === "clearIntent") {
         eng.clearIntent(msg.clientId);
       }
-      conn.send(result);
+      try {
+        conn.send(result);
+      } catch {
+        /* */
+      }
       pushAll();
     }
 
@@ -83,13 +116,24 @@ export function TablePage() {
       unsub();
       peer.destroy();
       engineRef.current = null;
+      connsRef.current.clear();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [code, clientId, pack]);
+
+  // QR must include host peer id
+  useEffect(() => {
+    if (!hostPeerId || !code) return;
+    const playUrl = `${window.location.origin}/play/${code.toUpperCase()}?h=${encodeURIComponent(hostPeerId)}`;
+    void QRCode.toDataURL(playUrl, { width: 220, margin: 1, color: { dark: "#e8e2d6", light: "#0c0b0a" } }).then(
+      setQr,
+    );
+  }, [hostPeerId, code]);
 
   if (!pack) {
     return (
       <main style={{ padding: 40 }}>
-        <p>Нет проекта. Создайте сценарий в мастерской.</p>
+        <p>Нет проекта.</p>
         <Link to="/">Сценарии</Link>
       </main>
     );
@@ -104,13 +148,17 @@ export function TablePage() {
   }
 
   const board = room.shareBoard[0];
+  const playUrl =
+    hostPeerId &&
+    `${typeof window !== "undefined" ? window.location.origin : ""}/play/${code.toUpperCase()}?h=${hostPeerId}`;
 
   return (
-    <main style={{ maxWidth: 900, margin: "0 auto", padding: 20 }}>
+    <main style={{ maxWidth: 920, margin: "0 auto", padding: 20 }}>
       <header style={{ display: "flex", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
         <div>
           <p className="brass" style={{ fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase" }}>
-            Хаб стола · {peerReady ? "PeerJS online" : "подключение…"}
+            Хаб · {peerReady ? "сигнал online" : "ждём PeerJS…"} · гостей:{" "}
+            {guestCount}
           </p>
           <h1 className="font-display" style={{ margin: "4px 0", color: "var(--paper)" }}>
             {room.projectTitle}
@@ -127,15 +175,22 @@ export function TablePage() {
             </p>
           ) : null}
           {err ? <p className="danger">{err}</p> : null}
+          {playUrl ? (
+            <p className="faint" style={{ fontSize: 11, wordBreak: "break-all", maxWidth: 420 }}>
+              Ссылка для телефона: {playUrl}
+            </p>
+          ) : null}
         </div>
         {qr ? (
           <div className="card" style={{ textAlign: "center" }}>
-            <img src={qr} alt="QR" width={160} height={160} />
+            <img src={qr} alt="QR" width={180} height={180} />
             <p className="faint" style={{ fontSize: 11 }}>
-              Телефоны → /play/{room.code}
+              Сканируйте после «сигнал online»
             </p>
           </div>
-        ) : null}
+        ) : (
+          <p className="muted">Готовим QR…</p>
+        )}
       </header>
 
       {board ? (
@@ -152,8 +207,12 @@ export function TablePage() {
 
       {room.status === "lobby" ? (
         <section className="card" style={{ marginTop: 20 }}>
-          <h3 style={{ color: "var(--paper)" }}>Роль на этом ПК (опционально)</h3>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          <h3 style={{ color: "var(--paper)" }}>1. Роль (на ПК или на телефоне)</h3>
+          <p className="muted" style={{ fontSize: 13 }}>
+            Нужна хотя бы одна роль за столом. Можно взять на этом ПК или на
+            телефоне по QR.
+          </p>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
             {ROSTER.map((c) => (
               <button
                 key={c.id}
@@ -167,55 +226,147 @@ export function TablePage() {
                   );
                   pushAll();
                 }}
+                style={{
+                  borderColor:
+                    room.myCharacterId === c.id ? "var(--paper)" : undefined,
+                }}
               >
                 {c.name}
+                {room.takenCharacterIds.includes(c.id) && room.myCharacterId !== c.id
+                  ? " ✓"
+                  : ""}
               </button>
             ))}
           </div>
+          <h3 style={{ color: "var(--paper)", marginTop: 20 }}>2. Старт</h3>
           <button
             type="button"
             className="btn btn-primary"
-            style={{ marginTop: 16, width: "100%" }}
+            style={{ width: "100%" }}
+            disabled={!room.takenCharacterIds.length}
             onClick={() => {
               const r = engineRef.current?.start(clientId);
               if (r && !r.ok) setErr(r.error ?? "Ошибка");
+              else setErr(null);
               pushAll();
             }}
           >
             Начать дело
+            {!room.takenCharacterIds.length ? " (сначала роль)" : ""}
           </button>
         </section>
       ) : (
-        <section style={{ marginTop: 20, display: "grid", gap: 12, gridTemplateColumns: "1fr 1fr" }}>
-          <div className="card">
-            <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
-              За столом
-            </p>
-            <ul style={{ margin: "8px 0", paddingLeft: 18 }}>
-              {room.seats
-                .filter((s) => s.characterId)
-                .map((s) => (
-                  <li key={s.clientId}>{s.displayName}</li>
-                ))}
-            </ul>
-          </div>
-          <div className="card">
-            <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
-              Доска share
-            </p>
-            {room.shareBoard.length === 0 ? (
-              <p className="muted">Пока пусто</p>
-            ) : (
-              room.shareBoard.map((s) => (
-                <div key={s.id} style={{ marginTop: 8 }}>
-                  <div style={{ color: "var(--paper)" }}>{s.title}</div>
-                  <div className="faint" style={{ fontSize: 11 }}>
-                    {s.fromName} · {s.locationName}
+        <section style={{ marginTop: 20, display: "grid", gap: 12 }}>
+          <div
+            style={{
+              display: "grid",
+              gap: 12,
+              gridTemplateColumns: "repeat(auto-fit,minmax(240px,1fr))",
+            }}
+          >
+            <div className="card">
+              <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
+                За столом
+              </p>
+              <ul style={{ margin: "8px 0", paddingLeft: 18 }}>
+                {room.seats
+                  .filter((s) => s.characterId)
+                  .map((s) => (
+                    <li key={s.clientId}>{s.displayName}</li>
+                  ))}
+              </ul>
+            </div>
+            <div className="card">
+              <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
+                Share
+              </p>
+              {room.shareBoard.length === 0 ? (
+                <p className="muted">Пока пусто</p>
+              ) : (
+                room.shareBoard.map((s) => (
+                  <div key={s.id} style={{ marginTop: 8 }}>
+                    <div style={{ color: "var(--paper)" }}>{s.title}</div>
+                    <div className="faint" style={{ fontSize: 11 }}>
+                      {s.fromName} · {s.locationName}
+                    </div>
                   </div>
-                </div>
-              ))
-            )}
+                ))
+              )}
+            </div>
           </div>
+
+          {/* Host plays on PC if they claimed a role */}
+          {room.myCharacterId ? (
+            <div className="card">
+              <p className="brass" style={{ fontSize: 11, textTransform: "uppercase" }}>
+                Ваш ход (ПК) · {room.myLocationName}
+              </p>
+              {room.lastResult ? (
+                <p className="muted" style={{ fontSize: 14 }}>
+                  {room.lastResult}
+                </p>
+              ) : null}
+              {room.myIntent ? (
+                <div>
+                  <p className="brass">Ход сдан — ждём остальных</p>
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={() => {
+                      engineRef.current?.clearIntent(clientId);
+                      pushAll();
+                    }}
+                  >
+                    Отменить
+                  </button>
+                </div>
+              ) : (
+                <div style={{ display: "grid", gap: 8, marginTop: 8 }}>
+                  {room.availableActions.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className="btn"
+                      style={{ height: "auto", padding: 12, textAlign: "left" }}
+                      onClick={() => {
+                        engineRef.current?.submitIntent(
+                          clientId,
+                          a.intent as ActionIntent,
+                        );
+                        pushAll();
+                      }}
+                    >
+                      <div style={{ color: "var(--paper)" }}>{a.label}</div>
+                      {a.detail ? (
+                        <div className="faint" style={{ fontSize: 11 }}>
+                          {a.detail}
+                        </div>
+                      ) : null}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <h4 style={{ marginTop: 16, color: "var(--brass)", fontSize: 12 }}>
+                Улики
+              </h4>
+              {room.myClues.length === 0 ? (
+                <p className="muted">Пока пусто</p>
+              ) : (
+                room.myClues.map((c) => (
+                  <div key={c.id} style={{ marginTop: 6 }}>
+                    <div style={{ color: "var(--paper)" }}>{c.title}</div>
+                    <div className="muted" style={{ fontSize: 13 }}>
+                      {c.body}
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          ) : (
+            <p className="muted">
+              На этом ПК роли нет — играйте с телефона по QR.
+            </p>
+          )}
         </section>
       )}
 
