@@ -13,6 +13,7 @@ import type {
   ActionIntent,
   ActionOption,
   JournalEntry,
+  PopupNotice,
   Seat,
   SharePayload,
   TurnSnapshot,
@@ -52,6 +53,7 @@ export class TurnEngine {
   private intents = new Map<string, ActionIntent>();
   private lastResultOf = new Map<string, string>();
   private shareBoard: SharePayload[] = [];
+  private popupsOf = new Map<string, PopupNotice[]>();
   private lastPublicEvent: string | null = null;
   private listeners = new Set<() => void>();
   private firedTimelineRounds = new Set<number>();
@@ -132,6 +134,7 @@ export class TurnEngine {
       this.journalOf.set(s.clientId, []);
       this.inspected.set(s.clientId, new Set());
       this.talkUsed.set(s.clientId, new Set());
+      this.popupsOf.set(s.clientId, []);
     }
     this.flags = {};
     this.firedTimelineRounds.clear();
@@ -162,6 +165,16 @@ export class TurnEngine {
     this.emit();
   }
 
+  dismissPopup(clientId: string, popupId: string) {
+    const list = this.popupsOf.get(clientId) ?? [];
+    this.popupsOf.set(
+      clientId,
+      list.filter((p) => p.id !== popupId),
+    );
+    this.emit();
+    return { ok: true as const };
+  }
+
   private setFlags(list?: string[]) {
     if (!list) return;
     for (const f of list) this.flags[f] = true;
@@ -179,7 +192,18 @@ export class TurnEngine {
     this.journalOf.set(clientId, list.slice(0, 40));
   }
 
-  /** Fire timeline rules scheduled for this round number (once). */
+  private pushPopup(clientId: string, title: string, body: string, round: number) {
+    const list = this.popupsOf.get(clientId) ?? [];
+    list.push({
+      id: newId(),
+      title,
+      body,
+      round,
+    });
+    this.popupsOf.set(clientId, list);
+  }
+
+  /** Timeline → personal phone popups (NOT share board). */
   private fireTimelineForRound(round: number) {
     if (this.firedTimelineRounds.has(round)) return;
     const rules = this.timeline.filter((r) => r.atRound === round);
@@ -192,36 +216,18 @@ export class TurnEngine {
         this.flags[`unlock_${rule.unlockLocationId}`] = true;
       }
 
-      const targets =
-        rule.scope === "all"
-          ? this.players()
-          : rule.scope === "same_location"
-            ? this.players() // no anchor loc → treat as all for timeline
-            : this.players();
-
+      const targets = this.players();
       for (const s of targets) {
         this.pushJournal(s.clientId, rule.title || `Ход ${round}`, rule.body || "");
         if (rule.grantClue) this.addClue(s.clientId, rule.grantClue);
-        this.lastResultOf.set(
+        this.pushPopup(
           s.clientId,
-          rule.body || rule.title || `Событие раунда ${round}`,
+          rule.title || `Ход ${round}`,
+          rule.body || "",
+          round,
         );
       }
-
-      if (rule.scope === "all" && (rule.body || rule.title)) {
-        this.shareBoard = [
-          {
-            id: newId(),
-            fromName: "Сценарий",
-            locationName: `Раунд ${round}`,
-            title: rule.title || `Ход ${round}`,
-            body: rule.body || "",
-            round,
-          },
-          ...this.shareBoard,
-        ].slice(0, 12);
-        this.lastPublicEvent = `Раунд ${round}: ${rule.title}`;
-      }
+      this.lastPublicEvent = `Раунд ${round}: событие сценария (у игроков на телефонах)`;
     }
   }
 
@@ -333,7 +339,6 @@ export class TurnEngine {
       { id: "wait", intent: { type: "wait" }, label: "Ничего не делать" },
     ];
     for (const e of availableExits(this.graph, loc, this.flags)) {
-      // Optional unlock gates: exit.to requires unlock_X flag if such location was gated
       const unlockKey = `unlock_${e.to}`;
       if (
         Object.keys(this.flags).some((k) => k.startsWith("unlock_")) &&
@@ -341,7 +346,6 @@ export class TurnEngine {
         this.timeline.some((t) => t.unlockLocationId === e.to) &&
         !this.flags[unlockKey]
       ) {
-        // only gate if a timeline unlock exists for this loc and not yet unlocked
         continue;
       }
       opts.push({
@@ -419,6 +423,7 @@ export class TurnEngine {
       myClues: this.cluesOf.get(clientId) ?? [],
       myJournal: this.journalOf.get(clientId) ?? [],
       shareBoard: this.shareBoard,
+      myPopups: this.popupsOf.get(clientId) ?? [],
       lastResult: this.lastResultOf.get(clientId) ?? null,
       lastPublicEvent: this.lastPublicEvent,
     };
