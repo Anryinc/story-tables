@@ -1,5 +1,6 @@
-import { type CSSProperties } from "react";
-import { abilityIdsForSequence } from "@/lib/lore/types";
+import { useState, type CSSProperties } from "react";
+import { addAssetFromFile, resolveAssetUrl } from "@/lib/assets/store";
+import { abilityIdsForSequence, findSequence } from "@/lib/lore/types";
 import { getLoreBase, listLoreBases } from "@/lib/lore/registry";
 import {
   createCharacter,
@@ -17,6 +18,7 @@ export function CharactersPanel({
   const chars = doc.characters ?? [];
   const base = getLoreBase(doc.loreBaseId);
   const bases = listLoreBases();
+  const [uploading, setUploading] = useState<string | null>(null);
 
   const setChars = (next: ScenarioCharacter[]) => {
     onChange({ ...doc, characters: next });
@@ -26,12 +28,54 @@ export function CharactersPanel({
     setChars(chars.map((c) => (c.id === id ? { ...c, ...patch } : c)));
   };
 
+  const onPortraitFile = async (charId: string, file: File | undefined) => {
+    if (!file || !file.type.startsWith("image/")) return;
+    setUploading(charId);
+    try {
+      const meta = await addAssetFromFile(file);
+      const url = await resolveAssetUrl(meta);
+      if (url) {
+        update(charId, { portraitUrl: url, portraitAssetId: meta.id });
+      }
+    } finally {
+      setUploading(null);
+    }
+  };
+
   return (
     <div style={{ padding: 16, overflow: "auto", height: "100%" }}>
-      <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 16 }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 8,
+          alignItems: "center",
+          marginBottom: 12,
+          flexWrap: "wrap",
+        }}
+      >
         <h2 className="font-display" style={{ margin: 0, color: "var(--paper)", flex: 1 }}>
           Персонажи
         </h2>
+        <label className="muted" style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 8 }}>
+          База лора
+          <select
+            value={doc.loreBaseId ?? ""}
+            onChange={(e) =>
+              onChange({
+                ...doc,
+                loreBaseId: e.target.value || undefined,
+              })
+            }
+            style={{ ...field, width: "auto", marginTop: 0, minWidth: 120 }}
+          >
+            <option value="">— нет —</option>
+            {bases.map((b) => (
+              <option key={b.id} value={b.id}>
+                {b.title}
+              </option>
+            ))}
+          </select>
+        </label>
         <button
           type="button"
           className="btn btn-primary"
@@ -41,104 +85,153 @@ export function CharactersPanel({
         </button>
       </div>
 
-      <label className="muted" style={{ fontSize: 12, display: "block", marginBottom: 16 }}>
-        База лора сценария
-        <select
-          value={doc.loreBaseId ?? ""}
-          onChange={(e) =>
-            onChange({
-              ...doc,
-              loreBaseId: e.target.value || undefined,
-            })
-          }
-          style={field}
-        >
-          <option value="">— нет —</option>
-          {bases.map((b) => (
-            <option key={b.id} value={b.id}>
-              {b.title} v{b.version}
-            </option>
-          ))}
-        </select>
-      </label>
-
       {chars.length === 0 ? (
         <p className="muted">Нет ролей. Добавьте персонажа — он появится в лобби стола.</p>
       ) : (
-        <div style={{ display: "grid", gap: 16, maxWidth: 560 }}>
-          {chars.map((c) => (
-            <div key={c.id} className="card" style={{ display: "grid", gap: 8 }}>
-              <input
-                value={c.name}
-                onChange={(e) => update(c.id, { name: e.target.value })}
-                style={{ ...field, fontSize: 16, color: "var(--paper)" }}
-                placeholder="Имя"
-              />
-              <textarea
-                value={c.blurb}
-                onChange={(e) => update(c.id, { blurb: e.target.value })}
-                rows={2}
-                placeholder="Бэк / описание"
-                style={field}
-              />
-              <input
-                value={c.portraitUrl ?? ""}
-                onChange={(e) => update(c.id, { portraitUrl: e.target.value || undefined })}
-                placeholder="Портрет URL"
-                style={field}
-              />
-              {c.portraitUrl ? (
-                <img
-                  src={c.portraitUrl}
-                  alt=""
-                  style={{ width: 72, height: 72, objectFit: "cover", borderRadius: 8 }}
-                />
-              ) : null}
+        <div
+          style={{
+            display: "grid",
+            gap: 16,
+            gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))",
+            alignItems: "start",
+          }}
+        >
+          {chars.map((c) => {
+            const seq =
+              base && c.lore
+                ? findSequence(base, c.lore.pathwayId, c.lore.sequenceRank)
+                : null;
+            const pathMeta = base?.pathways.find((p) => p.id === c.lore?.pathwayId);
 
-              {base ? (
-                <>
-                  <label className="muted" style={{ fontSize: 12 }}>
-                    Путь (LoTM)
-                    <select
-                      value={c.lore?.pathwayId ?? ""}
-                      onChange={(e) => {
-                        const pathwayId = e.target.value;
-                        if (!pathwayId) {
-                          update(c.id, { lore: undefined });
-                          return;
-                        }
-                        const rank = (c.lore?.sequenceRank ?? 9) as 9 | 8 | 7 | 6 | 5 | 4;
-                        update(c.id, {
-                          lore: {
-                            baseId: base.id,
-                            pathwayId,
-                            sequenceRank: rank,
-                            enabledAbilityIds: abilityIdsForSequence(base, pathwayId, rank),
-                          },
-                        });
+            return (
+              <article
+                key={c.id}
+                className="card"
+                style={{
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                  padding: 0,
+                  overflow: "hidden",
+                  borderColor: "var(--line)",
+                }}
+              >
+                {/* Portrait */}
+                <div
+                  style={{
+                    position: "relative",
+                    aspectRatio: "3 / 4",
+                    background: "#1a1814",
+                    borderBottom: "1px solid var(--line)",
+                  }}
+                >
+                  {c.portraitUrl ? (
+                    <img
+                      src={c.portraitUrl}
+                      alt=""
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "cover",
+                        display: "block",
                       }}
-                      style={field}
+                    />
+                  ) : (
+                    <div
+                      style={{
+                        position: "absolute",
+                        inset: 0,
+                        display: "grid",
+                        placeItems: "center",
+                        color: "var(--faint)",
+                        fontSize: 13,
+                        textAlign: "center",
+                        padding: 16,
+                      }}
                     >
-                      <option value="">— без пути —</option>
-                      {base.pathways.map((p) => (
-                        <option key={p.id} value={p.id}>
-                          {p.nameRu} ({p.nameEn})
-                        </option>
-                      ))}
-                    </select>
+                      Нет портрета
+                    </div>
+                  )}
+                  <label
+                    style={{
+                      position: "absolute",
+                      left: 8,
+                      right: 8,
+                      bottom: 8,
+                      textAlign: "center",
+                      cursor: "pointer",
+                    }}
+                  >
+                    <span className="btn" style={{ height: 28, fontSize: 11, display: "inline-block" }}>
+                      {uploading === c.id ? "…" : "Загрузить портрет"}
+                    </span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      hidden
+                      onChange={(e) => {
+                        void onPortraitFile(c.id, e.target.files?.[0]);
+                        e.target.value = "";
+                      }}
+                    />
                   </label>
-                  {c.lore?.pathwayId ? (
-                    <>
-                      <label className="muted" style={{ fontSize: 12 }}>
-                        Последовательность (зелье)
+                </div>
+
+                <div style={{ padding: "0 12px 12px", display: "grid", gap: 8 }}>
+                  {/* Name */}
+                  <input
+                    value={c.name}
+                    onChange={(e) => update(c.id, { name: e.target.value })}
+                    style={{
+                      ...field,
+                      marginTop: 0,
+                      fontFamily: '"Cormorant Garamond", serif',
+                      fontSize: 20,
+                      border: "none",
+                      borderBottom: "1px solid var(--line)",
+                      borderRadius: 0,
+                      padding: "4px 0",
+                      background: "transparent",
+                    }}
+                    placeholder="Имя"
+                  />
+
+                  {/* Backstory */}
+                  <label className="muted" style={{ fontSize: 11 }}>
+                    Предыстория
+                    <textarea
+                      value={c.blurb}
+                      onChange={(e) => update(c.id, { blurb: e.target.value })}
+                      rows={3}
+                      placeholder="Кто этот человек до дела…"
+                      style={{ ...field, fontSize: 12, lineHeight: 1.45 }}
+                    />
+                  </label>
+
+                  {/* Pathway / sequence */}
+                  {base ? (
+                    <div style={{ display: "grid", gap: 6 }}>
+                      <label className="muted" style={{ fontSize: 11 }}>
+                        Путь
                         <select
-                          value={c.lore.sequenceRank}
+                          value={c.lore?.pathwayId ?? ""}
                           onChange={(e) => {
-                            const rank = Number(e.target.value) as 9 | 8 | 7 | 6 | 5 | 4;
-                            const pathwayId = c.lore!.pathwayId;
+                            const pathwayId = e.target.value;
+                            if (!pathwayId) {
+                              update(c.id, { lore: undefined });
+                              return;
+                            }
+                            const rank = (c.lore?.sequenceRank ?? 9) as
+                              | 9
+                              | 8
+                              | 7
+                              | 6
+                              | 5
+                              | 4;
                             update(c.id, {
                               lore: {
-                                ...c.lore!,
+                                baseId: base.id,
+                                pathwayId,
                                 sequenceRank: rank,
                                 enabledAbilityIds: abilityIdsForSequence(
                                   base,
@@ -150,40 +243,128 @@ export function CharactersPanel({
                           }}
                           style={field}
                         >
-                          {[9, 8, 7, 6, 5, 4].map((r) => {
-                            const seq = base.pathways
-                              .find((p) => p.id === c.lore?.pathwayId)
-                              ?.sequences.find((s) => s.rank === r);
-                            return (
-                              <option key={r} value={r}>
-                                C{r} · {seq?.nameRu ?? r}
-                              </option>
-                            );
-                          })}
+                          <option value="">— без пути —</option>
+                          {base.pathways.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.nameRu}
+                            </option>
+                          ))}
                         </select>
                       </label>
-                      <p className="faint" style={{ fontSize: 11, margin: 0 }}>
-                        Способностей: {c.lore.enabledAbilityIds?.length ?? 0}
-                      </p>
-                    </>
-                  ) : null}
-                </>
-              ) : (
-                <p className="faint" style={{ fontSize: 12 }}>
-                  Включите базу LoTM (здесь или ✦ Лор на Плане), чтобы назначить путь.
-                </p>
-              )}
 
-              <button
-                type="button"
-                className="btn"
-                style={{ color: "var(--danger)" }}
-                onClick={() => setChars(chars.filter((x) => x.id !== c.id))}
-              >
-                Удалить
-              </button>
-            </div>
-          ))}
+                      {c.lore?.pathwayId ? (
+                        <label className="muted" style={{ fontSize: 11 }}>
+                          Зелье / последовательность
+                          <select
+                            value={c.lore.sequenceRank}
+                            onChange={(e) => {
+                              const rank = Number(e.target.value) as
+                                | 9
+                                | 8
+                                | 7
+                                | 6
+                                | 5
+                                | 4;
+                              const pathwayId = c.lore!.pathwayId;
+                              update(c.id, {
+                                lore: {
+                                  ...c.lore!,
+                                  sequenceRank: rank,
+                                  enabledAbilityIds: abilityIdsForSequence(
+                                    base,
+                                    pathwayId,
+                                    rank,
+                                  ),
+                                },
+                              });
+                            }}
+                            style={field}
+                          >
+                            {[9, 8, 7, 6, 5, 4].map((r) => {
+                              const s = base.pathways
+                                .find((p) => p.id === c.lore?.pathwayId)
+                                ?.sequences.find((x) => x.rank === r);
+                              return (
+                                <option key={r} value={r}>
+                                  C{r} · {s?.nameRu ?? r}
+                                </option>
+                              );
+                            })}
+                          </select>
+                        </label>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <p className="faint" style={{ fontSize: 11, margin: 0 }}>
+                      Включите LoTM, чтобы выбрать путь и зелье.
+                    </p>
+                  )}
+
+                  {/* Sequence profile — pulled from lore */}
+                  {seq ? (
+                    <div
+                      style={{
+                        marginTop: 4,
+                        padding: 10,
+                        borderRadius: 10,
+                        background: "#141210",
+                        border: "1px solid #2a2622",
+                      }}
+                    >
+                      <p
+                        className="brass"
+                        style={{
+                          fontSize: 10,
+                          letterSpacing: "0.14em",
+                          textTransform: "uppercase",
+                          margin: "0 0 6px",
+                        }}
+                      >
+                        {pathMeta?.nameRu} · C{seq.rank} · {seq.nameRu}
+                      </p>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: 12,
+                          lineHeight: 1.5,
+                          color: "var(--muted)",
+                        }}
+                      >
+                        {seq.profileRu}
+                      </p>
+                      {seq.abilities.length > 0 ? (
+                        <ul
+                          style={{
+                            margin: "8px 0 0",
+                            paddingLeft: 16,
+                            fontSize: 11,
+                            color: "var(--faint)",
+                          }}
+                        >
+                          {seq.abilities.map((a) => (
+                            <li key={a.id} style={{ marginBottom: 2 }}>
+                              <span style={{ color: "var(--brass)" }}>{a.nameRu}</span>
+                              {" — "}
+                              {a.descriptionRu}
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
+                    </div>
+                  ) : null}
+
+                  <button
+                    type="button"
+                    className="btn"
+                    style={{ color: "var(--danger)", fontSize: 11, height: 30 }}
+                    onClick={() => setChars(chars.filter((x) => x.id !== c.id))}
+                  >
+                    Удалить
+                  </button>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

@@ -1,6 +1,7 @@
 /** LoTM: 22 pathways, sequences 9→4. Names from canon; P0 abilities richer. */
 
 import type { AbilityDef, PathwayDef, SequenceDef } from "../types";
+import { profileFor } from "./profiles";
 
 function stubAbility(
   pathwayId: string,
@@ -11,7 +12,7 @@ function stubAbility(
   return {
     id,
     nameRu: `Сила: ${seqNameRu}`,
-    descriptionRu: `Базовая сверхъестественная способность последовательности «${seqNameRu}» (C${rank}). Полная механика уточняется в следующих версиях базы LoTM.`,
+    descriptionRu: `Базовая сверхъестественная способность последовательности «${seqNameRu}» (C${rank}).`,
     mechanics: {
       cost: "action",
       oncePerGame: false,
@@ -22,7 +23,7 @@ function stubAbility(
           type: "reveal_text",
           scope: "self",
           title: seqNameRu,
-          body: `Вы опираетесь на силу пути (C${rank}: ${seqNameRu}). Окружающие могут не заметить ничего явного — но мир уже чуть сдвинулся.`,
+          body: `Вы опираетесь на силу пути (C${rank}: ${seqNameRu}).`,
         },
         { type: "set_flag", flag: `ability_used:${id}` },
       ],
@@ -39,20 +40,19 @@ function seqs(
     rank: rank as 9 | 8 | 7 | 6 | 5 | 4,
     nameEn,
     nameRu,
+    profileRu: profileFor(pathwayId, rank),
     actingPrincipleRu: `Действуйте в духе «${nameRu}».`,
-    potionSummaryRu: `Зелье последовательности ${rank} пути (канон LoTM).`,
+    potionSummaryRu: `Зелье C${rank}: ${nameRu}.`,
     abilities: rich?.[rank] ?? [stubAbility(pathwayId, rank, nameRu)],
   }));
 }
 
-/** Detailed P0: Fool */
 const foolRich: Record<number, AbilityDef[]> = {
   9: [
     {
       id: "fool.9.spirit_vision",
       nameRu: "Духовное зрение",
-      descriptionRu:
-        "Видеть ауры, слабые духовные следы на предметах и людях. Полезно при осмотре улик.",
+      descriptionRu: "Видеть ауры и духовные следы на предметах и людях.",
       mechanics: {
         cost: "action",
         cooldownRounds: 0,
@@ -62,7 +62,7 @@ const foolRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "self",
             title: "Духовное зрение",
-            body: "Контуры мира двоятся. На предметах — тонкие следы чужого присутствия; на живых — дрожащие ореолы эмоций.",
+            body: "Контуры мира двоятся. На предметах — следы присутствия; на живых — ореолы эмоций.",
           },
           { type: "set_flag", flag: "ability_used:fool.9.spirit_vision" },
           { type: "set_flag", flag: "spirit_vision" },
@@ -82,7 +82,7 @@ const foolRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "self",
             title: "Гадание",
-            body: "Монета, карты или маятник дают смутный, но настойчивый ответ. Судьба шепчет — не всегда правду, но всегда что-то.",
+            body: "Монета или маятник дают смутный, но настойчивый ответ.",
           },
           { type: "set_flag", flag: "ability_used:fool.9.divination" },
         ],
@@ -93,7 +93,7 @@ const foolRich: Record<number, AbilityDef[]> = {
     {
       id: "fool.8.agility",
       nameRu: "Ловкость клоуна",
-      descriptionRu: "Сверхъестественная координация, уклонение, акробатика.",
+      descriptionRu: "Сверхъестественная координация и уклонение.",
       mechanics: {
         cost: "action",
         cooldownRounds: 1,
@@ -103,7 +103,7 @@ const foolRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "self",
             title: "Ловкость",
-            body: "Тело отвечает быстрее мысли. Падение, удар, узкий проём — вы уже на другой стороне.",
+            body: "Тело отвечает быстрее мысли.",
           },
           { type: "set_flag", flag: "ability_used:fool.8.agility" },
         ],
@@ -114,7 +114,7 @@ const foolRich: Record<number, AbilityDef[]> = {
     {
       id: "fool.7.illusion",
       nameRu: "Иллюзия",
-      descriptionRu: "Кратковременный обман чувств: звук, вспышка, ложный силуэт.",
+      descriptionRu: "Краткий обман чувств.",
       mechanics: {
         cost: "action",
         cooldownRounds: 1,
@@ -124,7 +124,7 @@ const foolRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "same_location",
             title: "Иллюзия",
-            body: "На мгновение реальность дрогнула: кто-то увидел то, чего не было.",
+            body: "На мгновение реальность дрогнула.",
           },
           { type: "set_flag", flag: "ability_used:fool.7.illusion" },
         ],
@@ -135,10 +135,9 @@ const foolRich: Record<number, AbilityDef[]> = {
     {
       id: "fool.6.faceless",
       nameRu: "Смена облика",
-      descriptionRu: "Изменить черты лица и голос на время.",
+      descriptionRu: "Изменить черты лица и голос.",
       mechanics: {
         cost: "action",
-        oncePerGame: false,
         cooldownRounds: 2,
         setsFlags: ["ability_used:fool.6.faceless", "disguised"],
         effects: [
@@ -146,7 +145,7 @@ const foolRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "self",
             title: "Безликий",
-            body: "Кожа и голос подчиняются воле. Вы — не вы, пока хватает концентрации.",
+            body: "Кожа и голос подчиняются воле.",
           },
           { type: "set_flag", flag: "disguised" },
           { type: "set_flag", flag: "ability_used:fool.6.faceless" },
@@ -158,7 +157,7 @@ const foolRich: Record<number, AbilityDef[]> = {
     {
       id: "fool.5.threads",
       nameRu: "Духовные нити",
-      descriptionRu: "Ощутить и слабо потянуть духовные нити цели.",
+      descriptionRu: "Ощутить духовные нити цели.",
       mechanics: {
         cost: "action",
         cooldownRounds: 2,
@@ -168,7 +167,7 @@ const foolRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "self",
             title: "Нити",
-            body: "В воздухе — паутина связей. Одна нить вибрирует сильнее: чужая воля рядом.",
+            body: "В воздухе — паутина связей.",
           },
           { type: "set_flag", flag: "ability_used:fool.5.threads" },
         ],
@@ -179,7 +178,7 @@ const foolRich: Record<number, AbilityDef[]> = {
     {
       id: "fool.4.spirit_world",
       nameRu: "Шаг в духовный мир",
-      descriptionRu: "Краткий выход в слой духовного мира (нарративно).",
+      descriptionRu: "Краткий выход в духовный мир.",
       mechanics: {
         cost: "action",
         oncePerGame: true,
@@ -189,7 +188,7 @@ const foolRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "self",
             title: "Духовный мир",
-            body: "Стены становятся полупрозрачными. Здесь другие правила — и другие опасности.",
+            body: "Стены становятся полупрозрачными.",
           },
           { type: "set_flag", flag: "ability_used:fool.4.spirit_world" },
         ],
@@ -203,7 +202,7 @@ const doorRich: Record<number, AbilityDef[]> = {
     {
       id: "door.9.open",
       nameRu: "Открыть дверь",
-      descriptionRu: "Проходить сквозь препятствия, открывать «двери» в широком смысле.",
+      descriptionRu: "Проходить сквозь препятствия.",
       mechanics: {
         cost: "action",
         cooldownRounds: 1,
@@ -213,7 +212,7 @@ const doorRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "self",
             title: "Дверь",
-            body: "Граница поддалась. То, что должно было держать, на мгновение стало проходом.",
+            body: "Граница поддалась.",
           },
           { type: "set_flag", flag: "door_opened" },
           { type: "set_flag", flag: "ability_used:door.9.open" },
@@ -228,7 +227,7 @@ const visionaryRich: Record<number, AbilityDef[]> = {
     {
       id: "visionary.9.observe",
       nameRu: "Наблюдение",
-      descriptionRu: "Считывать поверхностные эмоции и намерения.",
+      descriptionRu: "Считывать поверхностные эмоции.",
       mechanics: {
         cost: "action",
         cooldownRounds: 0,
@@ -238,7 +237,7 @@ const visionaryRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "self",
             title: "Наблюдатель",
-            body: "Чужие чувства проступают, как чернила на промокашке. Страх, ложь, привязанность — без слов.",
+            body: "Чужие чувства проступают без слов.",
           },
           { type: "set_flag", flag: "ability_used:visionary.9.observe" },
         ],
@@ -252,7 +251,7 @@ const sunRich: Record<number, AbilityDef[]> = {
     {
       id: "sun.9.chant",
       nameRu: "Священный напев",
-      descriptionRu: "Слова, что дают силу союзникам и жгут тьму.",
+      descriptionRu: "Слова силы и света.",
       mechanics: {
         cost: "action",
         cooldownRounds: 1,
@@ -262,7 +261,7 @@ const sunRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "same_location",
             title: "Напев",
-            body: "Голос наполняет комнату теплом. Тени отступают на шаг.",
+            body: "Голос наполняет комнату теплом.",
           },
           { type: "set_flag", flag: "ability_used:sun.9.chant" },
         ],
@@ -276,7 +275,7 @@ const warriorRich: Record<number, AbilityDef[]> = {
     {
       id: "twilight_giant.9.strength",
       nameRu: "Сила воина",
-      descriptionRu: "Тело крепче обычного человека; выдерживает удары и ношу.",
+      descriptionRu: "Тело крепче обычного человека.",
       mechanics: {
         cost: "action",
         cooldownRounds: 1,
@@ -286,7 +285,7 @@ const warriorRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "self",
             title: "Сила",
-            body: "Мышцы отвечают сверх меры. Дверь, засов, тяжёлый предмет — на грани возможного для человека.",
+            body: "Мышцы отвечают сверх меры.",
           },
           { type: "set_flag", flag: "ability_used:twilight_giant.9.strength" },
         ],
@@ -300,7 +299,7 @@ const hermitRich: Record<number, AbilityDef[]> = {
     {
       id: "hermit.9.pry",
       nameRu: "Любопытство мистика",
-      descriptionRu: "Чуять скрытое знание и мистические следы.",
+      descriptionRu: "Чуять скрытое знание.",
       mechanics: {
         cost: "action",
         cooldownRounds: 0,
@@ -310,9 +309,34 @@ const hermitRich: Record<number, AbilityDef[]> = {
             type: "reveal_text",
             scope: "self",
             title: "Тайновидец",
-            body: "В обычных вещах проступают узоры знания: формулы, символы, намёки на ритуал.",
+            body: "В вещах проступают узоры знания.",
           },
           { type: "set_flag", flag: "ability_used:hermit.9.pry" },
+        ],
+      },
+    },
+  ],
+};
+
+const darknessRich: Record<number, AbilityDef[]> = {
+  9: [
+    {
+      id: "darkness.9.night_sense",
+      nameRu: "Ночное чутьё",
+      descriptionRu: "Ночью чувства и сила резко острее; днём — ватность и сонливость.",
+      mechanics: {
+        cost: "action",
+        cooldownRounds: 0,
+        setsFlags: ["ability_used:darkness.9.night_sense", "sleepless_night"],
+        effects: [
+          {
+            type: "reveal_text",
+            scope: "self",
+            title: "Бессонный",
+            body: "Если сейчас ночь или полумрак — мир проступает резко, каждый шорох на счету. Днём эта же сила глушится дрёмой.",
+          },
+          { type: "set_flag", flag: "ability_used:darkness.9.night_sense" },
+          { type: "set_flag", flag: "sleepless_night" },
         ],
       },
     },
@@ -453,14 +477,18 @@ export const LOTM_PATHWAYS: PathwayDef[] = [
     nameRu: "Тьма",
     nameEn: "Darkness",
     group: "Eternal Darkness",
-    sequences: seqs("darkness", [
-      [9, "Sleepless", "Бессонный"],
-      [8, "Midnight Poet", "Полуночный поэт"],
-      [7, "Nightmare", "Кошмар"],
-      [6, "Soul Assurer", "Успокоитель душ"],
-      [5, "Spirit Warlock", "Духовный чернокнижник"],
-      [4, "Nightwatcher", "Ночной страж"],
-    ]),
+    sequences: seqs(
+      "darkness",
+      [
+        [9, "Sleepless", "Бессонный"],
+        [8, "Midnight Poet", "Полуночный поэт"],
+        [7, "Nightmare", "Кошмар"],
+        [6, "Soul Assurer", "Успокоитель душ"],
+        [5, "Spirit Warlock", "Духовный чернокнижник"],
+        [4, "Nightwatcher", "Ночной страж"],
+      ],
+      darknessRich,
+    ),
   },
   {
     id: "death",
