@@ -1,3 +1,4 @@
+import { type CSSProperties } from "react";
 import { abilityIdsForSequence } from "@/lib/lore/types";
 import { getLoreBase, listLoreBases } from "@/lib/lore/registry";
 import {
@@ -129,7 +130,7 @@ export function CharactersPanel({
                   {c.lore?.pathwayId ? (
                     <>
                       <label className="muted" style={{ fontSize: 12 }}>
-                        Последовательность
+                        Последовательность (зелье)
                         <select
                           value={c.lore.sequenceRank}
                           onChange={(e) => {
@@ -162,15 +163,14 @@ export function CharactersPanel({
                         </select>
                       </label>
                       <p className="faint" style={{ fontSize: 11, margin: 0 }}>
-                        Способностей: {c.lore.enabledAbilityIds?.length ?? 0} (C
-                        {c.lore.sequenceRank} и ниже)
+                        Способностей: {c.lore.enabledAbilityIds?.length ?? 0}
                       </p>
                     </>
                   ) : null}
                 </>
               ) : (
                 <p className="faint" style={{ fontSize: 12 }}>
-                  Включите базу LoTM выше, чтобы назначить путь и зелье.
+                  Включите базу LoTM (здесь или ✦ Лор на Плане), чтобы назначить путь.
                 </p>
               )}
 
@@ -190,7 +190,7 @@ export function CharactersPanel({
   );
 }
 
-const field: React.CSSProperties = {
+const field: CSSProperties = {
   display: "block",
   width: "100%",
   marginTop: 4,

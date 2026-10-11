@@ -1,4 +1,4 @@
-import { useRef, useState, type PointerEvent as RE } from "react";
+import { useEffect, useRef, useState, type PointerEvent as RE } from "react";
 import { SceneStage } from "./SceneStage";
 import type { ScenarioDocument, ScenarioNode, SceneObject } from "@/lib/scenario/types";
 
@@ -6,13 +6,22 @@ export function FloatingScene({
   doc,
   onChange,
   onClose,
+  initialLocId,
 }: {
   doc: ScenarioDocument;
   onChange: (d: ScenarioDocument) => void;
   onClose: () => void;
+  initialLocId?: string;
 }) {
   const locations = doc.nodes.filter((n) => n.kind === "location");
-  const [locId, setLocId] = useState(locations[0]?.id ?? "");
+  const [locId, setLocId] = useState(
+    initialLocId || locations[0]?.id || "",
+  );
+
+  useEffect(() => {
+    if (initialLocId) setLocId(initialLocId);
+  }, [initialLocId]);
+
   const loc =
     locations.find((n) => n.id === locId) ?? locations[0] ?? null;
 
@@ -76,7 +85,7 @@ export function FloatingScene({
         }}
       >
         <span className="brass" style={{ fontSize: 11, flex: 1 }}>
-          Сцена · превью
+          Сцена · {loc.data.title}
         </span>
         <select
           value={loc.id}
