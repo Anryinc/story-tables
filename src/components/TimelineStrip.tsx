@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from "react";
+import { ClueEditor, FlagListField, formatFlagList, parseFlagList } from "@/components/author-fields";
 import type { ScenarioDocument, TimelineMarker } from "@/lib/scenario/types";
 
 const MAX_ROUNDS = 24;
@@ -84,6 +85,15 @@ export function TimelineStrip({
           + Событие
         </button>
       </div>
+      <label className="muted" style={{ fontSize: 11, display: "block", marginBottom: 6 }}>
+        Флаги с начала партии
+        <input
+          value={formatFlagList(doc.initialFlags)}
+          placeholder="rain, night"
+          onChange={(e) => onChange({ ...doc, initialFlags: parseFlagList(e.target.value) })}
+          style={field}
+        />
+      </label>
 
       <div style={{ display: "flex", overflowX: "auto", paddingBottom: 4 }}>
         {Array.from({ length: MAX_ROUNDS }, (_, i) => i + 1).map((round) => {
@@ -197,6 +207,7 @@ export function TimelineStrip({
             >
               <option value="all">Все игроки</option>
               <option value="same_location">В выбранной локации</option>
+              <option value="actor">Каждому лично, без общего объявления</option>
             </select>
           </label>
           {selected.scope === "same_location" ? (
@@ -237,6 +248,49 @@ export function TimelineStrip({
               style={{ ...field, resize: "vertical" }}
             />
           </label>
+          <label className="muted" style={{ gridColumn: "1 / -1" }}>
+            Открыть локацию на этом ходе
+            <select
+              value={selected.unlockLocationId ?? ""}
+              onChange={(e) =>
+                update(selected.id, { unlockLocationId: e.target.value || undefined })
+              }
+              style={field}
+            >
+              <option value="">— не открывать —</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  {l.title} ({l.id})
+                </option>
+              ))}
+            </select>
+          </label>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <FlagListField
+              label="Поставить флаги"
+              value={selected.setFlags}
+              onChange={(setFlags) => update(selected.id, { setFlags })}
+            />
+          </div>
+          <label className="muted" style={{ gridColumn: "1 / -1" }}>
+            Только если уже есть флаг способности
+            <input
+              value={selected.requiresAbilityUsed ?? ""}
+              placeholder="ability_used:fool.9.spirit_vision"
+              onChange={(e) =>
+                update(selected.id, {
+                  requiresAbilityUsed: e.target.value.trim() || undefined,
+                })
+              }
+              style={field}
+            />
+          </label>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <ClueEditor
+              value={selected.grantClue}
+              onChange={(grantClue) => update(selected.id, { grantClue })}
+            />
+          </div>
           <button
             type="button"
             className="btn"

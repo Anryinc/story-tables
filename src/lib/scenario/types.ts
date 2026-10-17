@@ -45,6 +45,21 @@ export type TimelineMarker = {
   unlockLocationId?: string;
   requiresAbilityId?: string;
   requiresAbilityUsed?: string;
+  requiresFlag?: string;
+  requiresAnyFlags?: string[];
+  hideIfFlag?: string;
+};
+
+export type ScenarioTalkOption = {
+  id: string;
+  label: string;
+  reply: string;
+  once?: boolean;
+  setFlags?: string[];
+  requiresFlag?: string;
+  requiresAnyFlags?: string[];
+  hideIfFlag?: string;
+  grantClue?: { id: string; title: string; body: string; source: string; imageUrl?: string };
 };
 
 export type ScenarioNodeData = {
@@ -67,12 +82,17 @@ export type ScenarioNodeData = {
   once?: boolean;
   npcName?: string;
   npcIntro?: string;
+  /** Если задан, компилятор берёт эти реплики вместо одной «Поговорить». */
+  talkOptions?: ScenarioTalkOption[];
   portraitUrl?: string;
   portraitAssetId?: string;
   soundUrl?: string;
   soundAssetId?: string;
   requiresAbilityId?: string;
   requiresAbilityUsed?: string;
+  requiresFlag?: string;
+  requiresAnyFlags?: string[];
+  hideIfFlag?: string;
 };
 
 export type ScenarioNode = {
@@ -91,6 +111,9 @@ export type ScenarioEdge = {
   to: string;
   toPort: string;
   label?: string;
+  requiresFlag?: string;
+  requiresAnyFlags?: string[];
+  hideIfFlag?: string;
 };
 
 export type ScenarioManifest = {

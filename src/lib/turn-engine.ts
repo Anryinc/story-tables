@@ -6,6 +6,7 @@ import {
   locationName,
 } from "./graph/runtime";
 import type { Clue, GraphDocument } from "./graph/types";
+import { gateOpen } from "./graph/types";
 import { newId } from "./ids";
 import { findAbility, getLoreBase } from "./lore/registry";
 import type { TimelineRule } from "./scenario/compile";
@@ -16,6 +17,7 @@ import type {
   ActionOption,
   CharacterOption,
   JournalEntry,
+  PartySeatView,
   PopupNotice,
   Seat,
   SharePayload,
@@ -66,6 +68,7 @@ export class TurnEngine {
   private lastPublicEvent: string | null = null;
   private listeners = new Set<() => void>();
   private firedTimelineRounds = new Set<number>();
+  private initialFlags: string[];
 
   constructor(
     code: string,
@@ -77,6 +80,7 @@ export class TurnEngine {
     characters: ScenarioCharacter[] = [],
     loreBaseId?: string,
     playersMax = MAX_PARTY,
+    initialFlags: string[] = [],
   ) {
     this.code = code.toUpperCase();
     this.hostClientId = hostClientId;
@@ -87,6 +91,7 @@ export class TurnEngine {
     this.characters = characters;
     this.loreBaseId = loreBaseId;
     this.maxParty = playersMax;
+    this.initialFlags = initialFlags;
     this.seats.push({
       clientId: hostClientId,
       displayName: "Хост",
@@ -181,6 +186,7 @@ export class TurnEngine {
       this.abilityCooldown.set(s.clientId, new Map());
     }
     this.flags = {};
+    for (const f of this.initialFlags) this.flags[f] = true;
     this.firedTimelineRounds.clear();
     this.round = 1;
     this.phase = "planning";
@@ -252,6 +258,7 @@ export class TurnEngine {
     this.firedTimelineRounds.add(round);
 
     for (const rule of rules) {
+      if (!gateOpen(rule, this.flags)) continue;
       if (rule.requiresAbilityUsed && !this.flags[rule.requiresAbilityUsed]) continue;
 
       this.setFlags(rule.setFlags);
@@ -276,7 +283,11 @@ export class TurnEngine {
           round,
         );
       }
-      this.lastPublicEvent = `Раунд ${round}: событие сценария`;
+      if (rule.scope === "all") {
+        this.lastPublicEvent = rule.title
+          ? `Раунд ${round}: ${rule.title}`
+          : `Раунд ${round}: событие сценария`;
+      }
     }
   }
 
@@ -290,7 +301,8 @@ export class TurnEngine {
       if (
         availableExits(this.graph, loc, this.flags).some(
           (e) => e.to === intent.toLocationId,
-        )
+        ) &&
+        !this.isLocationLocked(intent.toLocationId)
       ) {
         this.locationOf.set(s.clientId, intent.toLocationId);
         const name = locationName(this.graph, intent.toLocationId);
@@ -336,6 +348,8 @@ export class TurnEngine {
     if (!base) return;
     const ab = findAbility(base, abilityId);
     if (!ab) return;
+    if (ab.mechanics.requiresFlags?.some((f) => !this.flags[f])) return;
+    if (ab.mechanics.oncePerGame && this.flags[`ability_used:${abilityId}`]) return;
 
     for (const fx of ab.mechanics.effects) {
       if (fx.type === "reveal_text") {
@@ -421,6 +435,7 @@ export class TurnEngine {
       {
         id: newId(),
         fromName,
+        locationId: loc,
         locationName: locName,
         title: clue.title,
         body: clue.body,
@@ -450,15 +465,7 @@ export class TurnEngine {
       { id: "wait", intent: { type: "wait" }, label: "Ничего не делать" },
     ];
     for (const e of availableExits(this.graph, loc, this.flags)) {
-      const unlockKey = `unlock_${e.to}`;
-      if (
-        Object.keys(this.flags).some((k) => k.startsWith("unlock_")) &&
-        this.graph.locations[e.to] &&
-        this.timeline.some((t) => t.unlockLocationId === e.to) &&
-        !this.flags[unlockKey]
-      ) {
-        continue;
-      }
+      if (this.isLocationLocked(e.to)) continue;
       opts.push({
         id: `move:${e.to}`,
         intent: { type: "move", toLocationId: e.to },
@@ -501,6 +508,7 @@ export class TurnEngine {
       for (const aid of ids) {
         const ab = base ? findAbility(base, aid) : null;
         if (!ab) continue;
+        if (ab.mechanics.requiresFlags?.some((f) => !this.flags[f])) continue;
         if (ab.mechanics.oncePerGame && this.flags[`ability_used:${aid}`]) continue;
         const until = cdMap.get(aid);
         if (until != null && until >= this.round) continue;
@@ -514,6 +522,33 @@ export class TurnEngine {
     }
 
     return opts;
+  }
+
+  private isLocationLocked(locationId: string): boolean {
+    const gated = this.timeline.some((t) => t.unlockLocationId === locationId);
+    if (!gated) return false;
+    return !this.flags[`unlock_${locationId}`];
+  }
+
+  private visibleShares(clientId: string): SharePayload[] {
+    const loc = this.locationOf.get(clientId);
+    if (!loc) {
+      return clientId === this.hostClientId ? this.shareBoard : [];
+    }
+    return this.shareBoard.filter((s) => s.locationId === loc);
+  }
+
+  private partyView(): PartySeatView[] {
+    return this.seats.map((s) => {
+      const loc = this.locationOf.get(s.clientId);
+      return {
+        clientId: s.clientId,
+        name: s.displayName,
+        locationName: loc ? locationName(this.graph, loc) : null,
+        ready: this.intents.has(s.clientId),
+        playing: Boolean(s.characterId),
+      };
+    });
   }
 
   snapshotFor(clientId: string): TurnSnapshot {
@@ -548,6 +583,9 @@ export class TurnEngine {
         .filter(Boolean) as string[],
       myLocationId: loc,
       myLocationName: loc ? locationName(this.graph, loc) : null,
+      myLocationDescription: loc
+        ? (this.graph.locations[loc]?.description ?? null)
+        : null,
       myLocationImage: loc ? this.graph.locations[loc]?.image ?? null : null,
       hereNpcs,
       hereWith,
@@ -559,10 +597,81 @@ export class TurnEngine {
       intentsNeeded: players.length,
       myClues: this.cluesOf.get(clientId) ?? [],
       myJournal: this.journalOf.get(clientId) ?? [],
-      shareBoard: this.shareBoard,
+      shareBoard: this.visibleShares(clientId),
       myPopups: this.popupsOf.get(clientId) ?? [],
       lastResult: this.lastResultOf.get(clientId) ?? null,
       lastPublicEvent: this.lastPublicEvent,
+      party: clientId === this.hostClientId ? this.partyView() : undefined,
     };
   }
+
+  exportState(): EngineState {
+    return {
+      phase: this.phase,
+      round: this.round,
+      seats: this.seats.map((s) => ({ ...s })),
+      flags: { ...this.flags },
+      locationOf: [...this.locationOf.entries()],
+      cluesOf: [...this.cluesOf.entries()],
+      journalOf: [...this.journalOf.entries()],
+      inspected: [...this.inspected.entries()].map(([id, set]) => [id, [...set]]),
+      talkUsed: [...this.talkUsed.entries()].map(([id, set]) => [id, [...set]]),
+      intents: [...this.intents.entries()],
+      lastResultOf: [...this.lastResultOf.entries()],
+      shareBoard: this.shareBoard,
+      popupsOf: [...this.popupsOf.entries()],
+      abilityCooldown: [...this.abilityCooldown.entries()].map(([id, map]) => [
+        id,
+        [...map.entries()],
+      ]),
+      lastPublicEvent: this.lastPublicEvent,
+      firedTimelineRounds: [...this.firedTimelineRounds],
+    };
+  }
+
+  importState(state: EngineState) {
+    this.phase = state.phase === "planning" ? "planning" : "lobby";
+    this.round = state.round || 0;
+    this.seats = state.seats?.length
+      ? state.seats.map((s) => ({ ...s }))
+      : this.seats;
+    this.flags = { ...(state.flags ?? {}) };
+    this.locationOf = new Map(state.locationOf ?? []);
+    this.cluesOf = new Map(state.cluesOf ?? []);
+    this.journalOf = new Map(state.journalOf ?? []);
+    this.inspected = new Map(
+      (state.inspected ?? []).map(([id, ids]) => [id, new Set(ids)]),
+    );
+    this.talkUsed = new Map(
+      (state.talkUsed ?? []).map(([id, ids]) => [id, new Set(ids)]),
+    );
+    this.intents = new Map(state.intents ?? []);
+    this.lastResultOf = new Map(state.lastResultOf ?? []);
+    this.shareBoard = state.shareBoard ?? [];
+    this.popupsOf = new Map(state.popupsOf ?? []);
+    this.abilityCooldown = new Map(
+      (state.abilityCooldown ?? []).map(([id, pairs]) => [id, new Map(pairs)]),
+    );
+    this.lastPublicEvent = state.lastPublicEvent ?? null;
+    this.firedTimelineRounds = new Set(state.firedTimelineRounds ?? []);
+  }
 }
+
+export type EngineState = {
+  phase: "lobby" | "planning";
+  round: number;
+  seats: Seat[];
+  flags: Record<string, boolean>;
+  locationOf: [string, string][];
+  cluesOf: [string, Clue[]][];
+  journalOf: [string, JournalEntry[]][];
+  inspected: [string, string[]][];
+  talkUsed: [string, string[]][];
+  intents: [string, ActionIntent][];
+  lastResultOf: [string, string][];
+  shareBoard: SharePayload[];
+  popupsOf: [string, PopupNotice[]][];
+  abilityCooldown: [string, [string, number][]][];
+  lastPublicEvent: string | null;
+  firedTimelineRounds: number[];
+};

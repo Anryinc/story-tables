@@ -209,6 +209,11 @@ export function PlayPage() {
           <h1 className="font-display" style={{ margin: "4px 0", color: "var(--paper)", fontSize: 28 }}>
             {room.myLocationName}
           </h1>
+          {room.myLocationDescription ? (
+            <p className="muted" style={{ fontSize: 14, lineHeight: 1.45 }}>
+              {room.myLocationDescription}
+            </p>
+          ) : null}
           <p className="faint" style={{ fontSize: 12 }}>
             {room.hereWith.length
               ? `Здесь же: ${room.hereWith.join(", ")}`
@@ -277,6 +282,42 @@ export function PlayPage() {
                 <div style={{ color: "var(--paper)" }}>{c.title}</div>
                 <div className="muted" style={{ fontSize: 13 }}>
                   {c.body}
+                </div>
+              </div>
+            ))
+          )}
+
+          {room.shareBoard.length > 0 ? (
+            <>
+              <h2 style={{ fontSize: 13, color: "var(--brass)", marginTop: 24 }}>
+                Показали в этой комнате
+              </h2>
+              {room.shareBoard.map((s) => (
+                <div key={s.id} className="card" style={{ marginBottom: 8 }}>
+                  <div className="faint" style={{ fontSize: 11 }}>
+                    {s.fromName} · ход {s.round}
+                  </div>
+                  <div style={{ color: "var(--paper)" }}>{s.title}</div>
+                  <div className="muted" style={{ fontSize: 13 }}>
+                    {s.body}
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : null}
+
+          <h2 style={{ fontSize: 13, color: "var(--brass)", marginTop: 24 }}>Журнал</h2>
+          {room.myJournal.length === 0 ? (
+            <p className="muted">Пока пусто</p>
+          ) : (
+            room.myJournal.map((j) => (
+              <div key={j.id} className="card" style={{ marginBottom: 8 }}>
+                <div className="faint" style={{ fontSize: 11 }}>
+                  Ход {j.round}
+                </div>
+                <div style={{ color: "var(--paper)" }}>{j.title}</div>
+                <div className="muted" style={{ fontSize: 13 }}>
+                  {j.body}
                 </div>
               </div>
             ))

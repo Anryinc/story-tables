@@ -24,6 +24,7 @@ export type Seat = {
 export type SharePayload = {
   id: string;
   fromName: string;
+  locationId: string;
   locationName: string;
   title: string;
   body: string;
@@ -52,6 +53,14 @@ export type CharacterOption = {
   portraitUrl?: string;
 };
 
+export type PartySeatView = {
+  clientId: string;
+  name: string;
+  locationName: string | null;
+  ready: boolean;
+  playing: boolean;
+};
+
 export type TurnSnapshot = {
   code: string;
   projectId: string;
@@ -66,6 +75,7 @@ export type TurnSnapshot = {
   takenCharacterIds: string[];
   myLocationId: string | null;
   myLocationName: string | null;
+  myLocationDescription: string | null;
   myLocationImage: string | null;
   hereNpcs: { id: string; name: string; intro?: string }[];
   hereWith: string[];
@@ -79,4 +89,6 @@ export type TurnSnapshot = {
   myPopups: PopupNotice[];
   lastResult: string | null;
   lastPublicEvent: string | null;
+  /** Только у хоста: кто в какой комнате. Гостям не отправляется. */
+  party?: PartySeatView[];
 };

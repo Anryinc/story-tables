@@ -1,18 +1,17 @@
-import { cherwoodScenario } from "@/projects/cherwood/scenario";
 import { getStoredScenario, saveScenario } from "./store";
 import type { ScenarioDocument } from "./types";
 
-/** Install / refresh bundled Cherwood into localStorage for the studio. */
-export function seedCherwoodToStudio(force = false): ScenarioDocument {
-  const existing = getStoredScenario("cherwood");
+/** Copy a bundled scenario into localStorage so the studio can edit it. */
+export function seedScenarioToStudio(doc: ScenarioDocument, force = false): ScenarioDocument {
+  const existing = getStoredScenario(doc.manifest.id);
   if (existing && !force) return existing;
-  const doc: ScenarioDocument = {
-    ...cherwoodScenario,
+  const next: ScenarioDocument = {
+    ...doc,
     manifest: {
-      ...cherwoodScenario.manifest,
+      ...doc.manifest,
       updatedAt: new Date().toISOString(),
     },
   };
-  saveScenario(doc);
-  return doc;
+  saveScenario(next);
+  return next;
 }

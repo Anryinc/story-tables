@@ -6,6 +6,7 @@ import {
   type PointerEvent as RE,
 } from "react";
 import { addAssetFromFile, resolveAssetUrl } from "@/lib/assets/store";
+import { ClueEditor, FlagListField, GateFields } from "@/components/author-fields";
 import {
   NODE_META,
   createNode,
@@ -13,6 +14,7 @@ import {
   type ScenarioDocument,
   type ScenarioEdge,
   type ScenarioNode,
+  type ScenarioTalkOption,
 } from "@/lib/scenario/types";
 
 /** Canvas shows only structural nodes; content lives inside location cards. */
@@ -101,6 +103,23 @@ export function NodeCanvas({
           return { ...n, ...patch } as ScenarioNode;
         }),
       });
+    },
+    [doc, onChange],
+  );
+
+  const updateEdge = useCallback(
+    (id: string, patch: Partial<ScenarioEdge>) => {
+      onChange({
+        ...doc,
+        edges: doc.edges.map((e) => (e.id === id ? { ...e, ...patch } : e)),
+      });
+    },
+    [doc, onChange],
+  );
+
+  const removeEdge = useCallback(
+    (id: string) => {
+      onChange({ ...doc, edges: doc.edges.filter((e) => e.id !== id) });
     },
     [doc, onChange],
   );
@@ -217,13 +236,14 @@ export function NodeCanvas({
       const toPort = port?.dataset.portId;
       const dir = port?.dataset.portDir;
       if (toId && toPort && dir === "in" && toId !== d.from) {
+        const target = doc.nodes.find((n) => n.id === toId);
         const edge: ScenarioEdge = {
           id: `e_${d.from}_${toId}_${Date.now()}`,
           from: d.from,
           fromPort: d.fromPort,
           to: toId,
           toPort,
-          label: "путь",
+          label: target?.kind === "location" ? target.data.title || "путь" : "путь",
         };
         onChange({ ...doc, edges: [...doc.edges, edge] });
       }
@@ -614,6 +634,8 @@ export function NodeCanvas({
             onRemoveChild={removeNode}
             onRemoveLoc={() => removeNode(selected.id)}
             onOpenScene={onOpenScene}
+            onUpdateEdge={updateEdge}
+            onRemoveEdge={removeEdge}
           />
         ) : (
           <div style={{ display: "grid", gap: 10 }}>
@@ -655,6 +677,8 @@ function LocationInspector({
   onRemoveChild,
   onRemoveLoc,
   onOpenScene,
+  onUpdateEdge,
+  onRemoveEdge,
 }: {
   loc: ScenarioNode;
   doc: ScenarioDocument;
@@ -670,8 +694,15 @@ function LocationInspector({
   onRemoveChild: (id: string) => void;
   onRemoveLoc: () => void;
   onOpenScene?: (id: string) => void;
+  onUpdateEdge: (id: string, patch: Partial<ScenarioEdge>) => void;
+  onRemoveEdge: (id: string) => void;
 }) {
   const { npcs, inspects } = childrenOf(doc, loc.id);
+  const exits = doc.edges.filter((e) => {
+    if (e.from !== loc.id || e.fromPort === "events") return false;
+    const to = doc.nodes.find((n) => n.id === e.to);
+    return to?.kind === "location";
+  });
 
   return (
     <div style={{ display: "grid", gap: 12 }}>
@@ -738,11 +769,56 @@ function LocationInspector({
         onChange={(v) => onUpdate(loc.id, { data: { locationId: v } })}
       />
       <Field
-        label="Описание (для мастера)"
+        label="Текст локации (видят игроки)"
         value={loc.data.description ?? ""}
         multiline
         onChange={(v) => onUpdate(loc.id, { data: { description: v } })}
       />
+
+      <section>
+        <span className="brass" style={{ fontSize: 11 }}>
+          Выходы
+        </span>
+        {exits.length === 0 ? (
+          <p className="faint" style={{ fontSize: 11 }}>
+            Тяните порт комнаты к другой комнате.
+          </p>
+        ) : (
+          exits.map((e) => {
+            const to = doc.nodes.find((n) => n.id === e.to);
+            return (
+              <div key={e.id} className="card" style={{ display: "grid", gap: 6, marginTop: 6 }}>
+                <span className="muted" style={{ fontSize: 11 }}>
+                  → {to?.data.title || e.to}
+                </span>
+                <Field
+                  label="Подпись"
+                  value={e.label ?? ""}
+                  onChange={(v) => onUpdateEdge(e.id, { label: v })}
+                />
+                <Field
+                  label="Нужен флаг"
+                  value={e.requiresFlag ?? ""}
+                  onChange={(v) => onUpdateEdge(e.id, { requiresFlag: v.trim() || undefined })}
+                />
+                <FlagListField
+                  label="Или любой из"
+                  value={e.requiresAnyFlags}
+                  onChange={(requiresAnyFlags) => onUpdateEdge(e.id, { requiresAnyFlags })}
+                />
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ height: 28, fontSize: 11, color: "var(--danger)" }}
+                  onClick={() => onRemoveEdge(e.id)}
+                >
+                  Убрать выход
+                </button>
+              </div>
+            );
+          })
+        )}
+      </section>
 
       <div style={{ display: "grid", gap: 6 }}>
         <span className="muted" style={{ fontSize: 11 }}>
@@ -860,18 +936,63 @@ function LocationInspector({
             onChange={(v) => onUpdate(editChild.id, { data: { npcIntro: v } })}
           />
           <Field
-            label="Реплика при разговоре"
-            value={editChild.data.body ?? ""}
-            multiline
-            onChange={(v) => onUpdate(editChild.id, { data: { body: v } })}
-          />
-          <Field
             label="Портрет URL"
             value={editChild.data.portraitUrl ?? ""}
             onChange={(v) =>
               onUpdate(editChild.id, { data: { portraitUrl: v || undefined } })
             }
           />
+          <GateFields
+            value={editChild.data}
+            onChange={(patch) => onUpdate(editChild.id, { data: patch })}
+          />
+          {editChild.data.talkOptions?.length ? (
+            <TalkLines
+              options={editChild.data.talkOptions}
+              onChange={(talkOptions) => onUpdate(editChild.id, { data: { talkOptions } })}
+            />
+          ) : (
+            <>
+              <Field
+                label="Реплика при разговоре"
+                value={editChild.data.body ?? ""}
+                multiline
+                onChange={(v) => onUpdate(editChild.id, { data: { body: v } })}
+              />
+              <FlagListField
+                label="Флаги после разговора"
+                value={editChild.data.setFlags}
+                onChange={(setFlags) => onUpdate(editChild.id, { data: { setFlags } })}
+              />
+              <ClueEditor
+                value={editChild.data.grantClue}
+                onChange={(grantClue) => onUpdate(editChild.id, { data: { grantClue } })}
+              />
+              <button
+                type="button"
+                className="btn"
+                style={{ height: 30, fontSize: 11 }}
+                onClick={() =>
+                  onUpdate(editChild.id, {
+                    data: {
+                      talkOptions: [
+                        {
+                          id: "talk",
+                          label: "Поговорить",
+                          reply: editChild.data.body || editChild.data.npcIntro || "…",
+                          once: false,
+                          setFlags: editChild.data.setFlags,
+                          grantClue: editChild.data.grantClue,
+                        },
+                      ],
+                    },
+                  })
+                }
+              >
+                Несколько реплик
+              </button>
+            </>
+          )}
           <button
             type="button"
             className="btn"
@@ -918,6 +1039,19 @@ function LocationInspector({
             />{" "}
             Один раз за игру
           </label>
+          <GateFields
+            value={editChild.data}
+            onChange={(patch) => onUpdate(editChild.id, { data: patch })}
+          />
+          <FlagListField
+            label="Поставить флаги"
+            value={editChild.data.setFlags}
+            onChange={(setFlags) => onUpdate(editChild.id, { data: { setFlags } })}
+          />
+          <ClueEditor
+            value={editChild.data.grantClue}
+            onChange={(grantClue) => onUpdate(editChild.id, { data: { grantClue } })}
+          />
           <button
             type="button"
             className="btn"
@@ -982,6 +1116,84 @@ const chipInspect: CSSProperties = {
   color: "#9a8bc4",
   border: "1px solid #9a8bc444",
 };
+
+function TalkLines({
+  options,
+  onChange,
+}: {
+  options: ScenarioTalkOption[];
+  onChange: (next: ScenarioTalkOption[]) => void;
+}) {
+  const patch = (id: string, p: Partial<ScenarioTalkOption>) => {
+    onChange(options.map((o) => (o.id === id ? { ...o, ...p } : o)));
+  };
+  return (
+    <div style={{ display: "grid", gap: 8 }}>
+      {options.map((o, i) => (
+        <div key={o.id} className="card" style={{ display: "grid", gap: 6 }}>
+          <span className="brass" style={{ fontSize: 10 }}>
+            Реплика {i + 1}
+          </span>
+          <Field
+            label="Кнопка"
+            value={o.label}
+            onChange={(v) => patch(o.id, { label: v })}
+          />
+          <Field
+            label="Ответ"
+            value={o.reply}
+            multiline
+            onChange={(v) => patch(o.id, { reply: v })}
+          />
+          <label className="muted" style={{ fontSize: 12 }}>
+            <input
+              type="checkbox"
+              checked={o.once !== false}
+              onChange={(e) => patch(o.id, { once: e.target.checked })}
+            />{" "}
+            Один раз
+          </label>
+          <GateFields value={o} onChange={(g) => patch(o.id, g)} />
+          <FlagListField
+            label="Поставить флаги"
+            value={o.setFlags}
+            onChange={(setFlags) => patch(o.id, { setFlags })}
+          />
+          <ClueEditor
+            value={o.grantClue}
+            onChange={(grantClue) => patch(o.id, { grantClue })}
+          />
+          <button
+            type="button"
+            className="btn"
+            style={{ height: 28, fontSize: 11, color: "var(--danger)" }}
+            onClick={() => onChange(options.filter((x) => x.id !== o.id))}
+          >
+            Удалить реплику
+          </button>
+        </div>
+      ))}
+      <button
+        type="button"
+        className="btn"
+        style={{ height: 30, fontSize: 11 }}
+        onClick={() =>
+          onChange([
+            ...options,
+            {
+              id: `line_${Math.random().toString(36).slice(2, 7)}`,
+              label: "Спросить ещё",
+              reply: "…",
+              once: true,
+            },
+          ])
+        }
+      >
+        + Реплика
+      </button>
+    </div>
+  );
+}
 
 function Field({
   label,

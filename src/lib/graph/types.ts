@@ -42,6 +42,7 @@ export type GraphLocation = {
   id: string;
   name: string;
   image?: string;
+  description?: string;
   exits: GraphExit[];
   inspect: GraphInspectable[];
   npcs?: GraphNpc[];

@@ -19,13 +19,14 @@ export function ProjectPage() {
   }
 
   const locCount = Object.keys(pack.graph.locations).length;
-  const title = stored?.manifest.title || pack.title;
-  const subtitle = stored?.manifest.subtitle;
+  const meta = stored?.manifest ?? pack.manifest;
+  const title = meta?.title || pack.title;
+  const subtitle = meta?.subtitle;
   const blurb =
-    stored?.manifest.blurb ||
+    meta?.blurb ||
     "Сценарий из мастерской. Пошаговые ходы, личные и общие события.";
   const cover =
-    stored?.manifest.coverImage ||
+    meta?.coverImage ||
     Object.values(pack.graph.locations).find((l) => l.image)?.image;
 
   return (
@@ -70,8 +71,8 @@ export function ProjectPage() {
         <p className="muted">{blurb}</p>
         <p className="faint" style={{ fontSize: 13 }}>
           Локаций: {locCount} · timeline: {pack.timeline.length}
-          {stored?.manifest.playersMin != null
-            ? ` · ${stored.manifest.playersMin}–${stored.manifest.playersMax} игр.`
+          {stored?.manifest.playersMin != null || pack.manifest
+            ? ` · ${meta?.playersMin ?? "?"}–${meta?.playersMax ?? pack.playersMax} игр.`
             : ""}
         </p>
         <button
@@ -81,7 +82,7 @@ export function ProjectPage() {
           onClick={() => {
             const code = makeRoomCode();
             sessionStorage.setItem("story-tables.project", projectId);
-            navigate(`/table/${code}`);
+            navigate(`/table/${code}?project=${encodeURIComponent(projectId)}`);
           }}
         >
           Открыть стол на этом ПК

@@ -121,8 +121,28 @@ const nodes: ScenarioNode[] = [
     grantClue: { id: "sleepless_window", title: "Окно, которое не гасло", body: "Копоть на стекле изнутри.", source: "Улица" },
   }),
   npc("npc_clara", "Клара Восс", 40, 420, "Женщина у фонаря смотрит на угловое окно.", "«Муж… Артур. Утром смотрел на меня, как на чужую.»", {
-    setFlags: ["heard_widow"],
-    grantClue: { id: "widow_story", title: "Муж, который забыл жену", body: "Артур Восс не узнал Клару.", source: "Клара Восс" },
+    talkOptions: [
+      {
+        id: "hear_widow",
+        label: "Выслушать Клару",
+        reply: "«Муж… Артур. Утром смотрел на меня, как на чужую. Потом вышел в туман.»",
+        once: true,
+        setFlags: ["heard_widow"],
+        grantClue: {
+          id: "widow_story",
+          title: "Муж, который забыл жену",
+          body: "Артур Восс не узнал Клару и исчез в тумане. Комната 7 за ним.",
+          source: "Клара Восс",
+        },
+      },
+      {
+        id: "ask_room",
+        label: "Спросить про комнату 7",
+        reply: "«Седьмая. Угол. Ночью видела свет. Не лампа.»",
+        once: true,
+        requiresFlag: "heard_widow",
+      },
+    ],
   }),
   inspect("ins_register", "Реестр", 520, 80, "Реестр гостей", "Восс, Пелл, Миллс. Край страницы липкий.", {
     setFlags: ["register_hint"],
@@ -132,7 +152,23 @@ const nodes: ScenarioNode[] = [
     grantClue: { id: "friday_ash", title: "Пятница в золе", body: "Обгоревшее расписание: пятница.", source: "Гостиная" },
   }),
   npc("npc_hattie", "Хэтти", 560, 420, "Хозяйка перебирает ключи.", "«Восс, Пелл, Миллс. Трезвость — в пятницу, внизу.»", {
-    setFlags: ["heard_boarders", "heard_hattie_basement"],
+    talkOptions: [
+      {
+        id: "ask_boarders",
+        label: "Спросить про жильцов",
+        reply:
+          "«Восс, Пелл, Миллс. Трезвость — в пятницу, внизу, чай без рома. Церковь Ночи спрашивала — я сказала: алкоголь.» На «внизу» стискивает ключи.",
+        once: true,
+        setFlags: ["heard_boarders", "heard_hattie_basement"],
+      },
+      {
+        id: "ask_voss",
+        label: "Спросить про Восса",
+        reply: "«Комната 7 оплачена. Ключ у него — или у того, кто держит дверь.»",
+        once: true,
+        requiresFlag: "heard_widow",
+      },
+    ],
   }),
   inspect("ins_door_marks", "Царапины", 840, 80, "Царапины у 7", "Косяк исчерчен изнутри.", {
     grantClue: { id: "door7_marks", title: "Царапины у комнаты 7", body: "Счёт на косяке изнутри.", source: "Коридор" },
@@ -152,7 +188,9 @@ const nodes: ScenarioNode[] = [
     setFlags: ["basement_door_seen"],
     grantClue: { id: "basement_held", title: "Дверь держат изнутри", body: "Замок свободен, полотно удерживают изнутри.", source: "Подвал" },
   }),
-  inspect("ins_listen", "Слух", 980, 520, "Прислушаться", "Ритм шагов по кругу. Кто-то считает."),
+  inspect("ins_listen", "Слух", 980, 520, "Прислушаться", "Ритм шагов по кругу. Кто-то считает.", {
+    requiresFlag: "basement_door_seen",
+  }),
 ];
 
 const edges: ScenarioEdge[] = [

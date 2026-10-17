@@ -14,6 +14,9 @@ export type TimelineRule = {
   unlockLocationId?: string;
   requiresAbilityId?: string;
   requiresAbilityUsed?: string;
+  requiresFlag?: string;
+  requiresAnyFlags?: string[];
+  hideIfFlag?: string;
 };
 
 export type CompiledScenario = {
@@ -24,6 +27,9 @@ export type CompiledScenario = {
   characters: ScenarioCharacter[];
   loreBaseId?: string;
   playersMax: number;
+  playersMin: number;
+  initialFlags: string[];
+  manifest?: ScenarioDocument["manifest"];
 };
 
 function locIdOf(n: ScenarioNode): string {
@@ -41,6 +47,7 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
       id,
       name: n.data.title || id,
       image: n.data.background,
+      description: n.data.description,
       exits: [],
       inspect: [],
       npcs: [],
@@ -58,6 +65,9 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
         locations[from].exits.push({
           to,
           label: e.label || b.data.title || to,
+          requiresFlag: e.requiresFlag,
+          requiresAnyFlags: e.requiresAnyFlags,
+          hideIfFlag: e.hideIfFlag,
         });
       }
     }
@@ -87,25 +97,45 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
           once: child.data.once !== false,
           setFlags: child.data.setFlags,
           clue: child.data.grantClue,
+          requiresFlag: child.data.requiresFlag,
+          requiresAnyFlags: child.data.requiresAnyFlags,
+          hideIfFlag: child.data.hideIfFlag,
         };
         if (!loc.inspect.some((x) => x.id === item.id)) loc.inspect.push(item);
       }
 
       if (child.kind === "npc") {
+        const authored = child.data.talkOptions ?? [];
         const npc: GraphNpc = {
           id: child.id,
           name: child.data.npcName || child.data.title || "NPC",
           intro: child.data.npcIntro || child.data.description,
-          options: [
-            {
-              id: "talk",
-              label: "Поговорить",
-              reply: child.data.body || child.data.npcIntro || "…",
-              once: false,
-              setFlags: child.data.setFlags,
-              clue: child.data.grantClue,
-            },
-          ],
+          requiresFlag: child.data.requiresFlag,
+          requiresAnyFlags: child.data.requiresAnyFlags,
+          hideIfFlag: child.data.hideIfFlag,
+          options:
+            authored.length > 0
+              ? authored.map((o) => ({
+                  id: o.id,
+                  label: o.label || "Поговорить",
+                  reply: o.reply || "…",
+                  once: o.once !== false,
+                  setFlags: o.setFlags,
+                  clue: o.grantClue,
+                  requiresFlag: o.requiresFlag,
+                  requiresAnyFlags: o.requiresAnyFlags,
+                  hideIfFlag: o.hideIfFlag,
+                }))
+              : [
+                  {
+                    id: "talk",
+                    label: "Поговорить",
+                    reply: child.data.body || child.data.npcIntro || "…",
+                    once: false,
+                    setFlags: child.data.setFlags,
+                    clue: child.data.grantClue,
+                  },
+                ],
         };
         if (!loc.npcs!.some((x) => x.id === npc.id)) loc.npcs!.push(npc);
       }
@@ -145,6 +175,9 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
       unlockLocationId: m.unlockLocationId,
       requiresAbilityId: m.requiresAbilityId,
       requiresAbilityUsed: m.requiresAbilityUsed,
+      requiresFlag: m.requiresFlag,
+      requiresAnyFlags: m.requiresAnyFlags,
+      hideIfFlag: m.hideIfFlag,
     });
   }
 
@@ -164,6 +197,9 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
         unlockLocationId: n.data.unlockLocationId,
         requiresAbilityId: n.data.requiresAbilityId,
         requiresAbilityUsed: n.data.requiresAbilityUsed,
+        requiresFlag: n.data.requiresFlag,
+        requiresAnyFlags: n.data.requiresAnyFlags,
+        hideIfFlag: n.data.hideIfFlag,
       });
       continue;
     }
@@ -181,6 +217,9 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
         unlockLocationId: ev.data.unlockLocationId ?? n.data.unlockLocationId,
         requiresAbilityId: ev.data.requiresAbilityId ?? n.data.requiresAbilityId,
         requiresAbilityUsed: ev.data.requiresAbilityUsed ?? n.data.requiresAbilityUsed,
+        requiresFlag: ev.data.requiresFlag ?? n.data.requiresFlag,
+        requiresAnyFlags: ev.data.requiresAnyFlags ?? n.data.requiresAnyFlags,
+        hideIfFlag: ev.data.hideIfFlag ?? n.data.hideIfFlag,
       });
     }
   }
@@ -195,5 +234,8 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
     characters,
     loreBaseId: doc.loreBaseId,
     playersMax: doc.manifest.playersMax || Math.max(4, characters.length),
+    playersMin: doc.manifest.playersMin || 1,
+    initialFlags: doc.initialFlags ?? [],
+    manifest: doc.manifest,
   };
 }
