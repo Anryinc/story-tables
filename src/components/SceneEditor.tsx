@@ -34,7 +34,8 @@ const field: CSSProperties = {
 function pickStudioBackground(
   list: SceneBackground[],
   fallback: string | undefined,
-  flag: string,
+  flags: Record<string, boolean>,
+  round: number,
 ): string | undefined {
   const items = list.length
     ? list
@@ -42,12 +43,34 @@ function pickStudioBackground(
       ? [{ id: "legacy", name: "Основной", url: fallback }]
       : [];
   const match = items.slice(1).find((b) => {
-    if (!flag) return false;
-    if (b.requiresFlag && b.requiresFlag !== flag) return false;
-    return Boolean(b.requiresFlag);
+    if (b.requiresFlag && !flags[b.requiresFlag]) return false;
+    if (b.atRound != null && round < b.atRound) return false;
+    return Boolean(b.requiresFlag || b.atRound != null);
   });
   return match?.url || items[0]?.url || fallback;
 }
+
+function nodeOpen(
+  node: ScenarioNode | undefined,
+  flags: Record<string, boolean>,
+): boolean {
+  if (!node) return true;
+  const d = node.data;
+  if (d.requiresFlag && !flags[d.requiresFlag]) return false;
+  if (d.requiresAnyFlags?.length && !d.requiresAnyFlags.some((f) => flags[f])) return false;
+  if (d.hideIfFlag && flags[d.hideIfFlag]) return false;
+  return true;
+}
+
+type PreviewPopup =
+  | { kind: "inspect"; title: string; body: string; image?: string }
+  | {
+      kind: "talk";
+      name: string;
+      intro?: string;
+      options: { id: string; label: string; reply: string }[];
+      chosen?: string;
+    };
 
 function childrenOf(doc: ScenarioDocument, locId: string) {
   const ids = new Set<string>();
@@ -88,7 +111,11 @@ export function SceneEditor({
   const [mode, setMode] = useState<Mode>("edit");
   const [sel, setSel] = useState<Sel>({ kind: "room" });
   const [uploading, setUploading] = useState(false);
-  const [previewFlag, setPreviewFlag] = useState("");
+  const [previewFlags, setPreviewFlags] = useState<string[]>([]);
+  const [flagDraft, setFlagDraft] = useState("");
+  const [previewRound, setPreviewRound] = useState(1);
+  const [previewSeen, setPreviewSeen] = useState<string[]>([]);
+  const [previewPopup, setPreviewPopup] = useState<PreviewPopup | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: string; ox: number; oy: number } | null>(null);
   const resize = useRef<{ id: string; ox: number; oy: number; w: number; h: number } | null>(null);
@@ -101,7 +128,8 @@ export function SceneEditor({
 
   const objects = loc.data.sceneObjects ?? [];
   const backgrounds = loc.data.backgrounds ?? [];
-  const stageBg = pickStudioBackground(backgrounds, loc.data.background, previewFlag);
+  const previewFlagMap = Object.fromEntries(previewFlags.map((f) => [f, true]));
+  const stageBg = pickStudioBackground(backgrounds, loc.data.background, previewFlagMap, previewRound);
   const { inspects, npcs } = childrenOf(doc, loc.id);
   const exits = exitsOf(doc, loc.id);
   const editing = mode === "edit";
@@ -375,8 +403,8 @@ export function SceneEditor({
             />
           </label>
           <span style={{ flex: 1 }} />
-          <ToolButton active={mode === "edit"} onClick={() => setMode("edit")}>Правка</ToolButton>
-          <ToolButton active={mode === "play"} onClick={() => setMode("play")}>Как у игрока</ToolButton>
+          <ToolButton active={mode === "edit"} onClick={() => { setMode("edit"); setPreviewPopup(null); }}>Правка</ToolButton>
+          <ToolButton active={mode === "play"} onClick={() => setMode("play")}>Превью</ToolButton>
         </div>
 
         <div
@@ -411,14 +439,48 @@ export function SceneEditor({
             </div>
           )}
           {objects.map((o) => {
+            const linked = selectedNodeOf(doc, o);
+            const open = nodeOpen(linked, previewFlagMap);
+            const spent = linked ? previewSeen.includes(linked.id) && linked.data.once !== false : false;
+            if (!editing && (!open || spent)) return null;
             const isNpc = o.kind === "npc" || o.interaction === "talk";
             const active = selectedPin?.id === o.id;
+            const onPlayClick = (e: RE) => {
+              if (editing) return;
+              e.stopPropagation();
+              if (!linked) return;
+              if (linked.kind === "inspect") {
+                setPreviewPopup({
+                  kind: "inspect",
+                  title: linked.data.inspectLabel || linked.data.title,
+                  body: linked.data.inspectResult || "…",
+                  image: linked.data.imageUrl,
+                });
+                if (linked.data.once !== false) {
+                  setPreviewSeen((s) => (s.includes(linked.id) ? s : [...s, linked.id]));
+                }
+              } else {
+                const options = (linked.data.talkOptions ?? [])
+                  .filter((line) => {
+                    if (line.requiresFlag && !previewFlagMap[line.requiresFlag]) return false;
+                    if (line.hideIfFlag && previewFlagMap[line.hideIfFlag]) return false;
+                    return true;
+                  })
+                  .map((line) => ({ id: line.id, label: line.label, reply: line.reply }));
+                setPreviewPopup({
+                  kind: "talk",
+                  name: linked.data.npcName || linked.data.title,
+                  intro: linked.data.npcIntro,
+                  options,
+                });
+              }
+            };
             if (isNpc) {
               return (
                 <button
                   key={o.id}
                   type="button"
-                  onPointerDown={(e) => onPinDown(e, o)}
+                  onPointerDown={(e) => (editing ? onPinDown(e, o) : onPlayClick(e))}
                   style={{
                     position: "absolute",
                     left: `${o.x}%`,
@@ -493,7 +555,7 @@ export function SceneEditor({
                 key={o.id}
                 type="button"
                 aria-label={o.label}
-                onPointerDown={(e) => onPinDown(e, o)}
+                onPointerDown={(e) => (editing ? onPinDown(e, o) : onPlayClick(e))}
                 style={{
                   position: "absolute",
                   left: `${cx}%`,
@@ -542,6 +604,129 @@ export function SceneEditor({
             );
           })}
         </div>
+
+        {!editing ? (
+          <div className="card" style={{ display: "grid", gap: 8, padding: 10 }}>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+              <span className="brass" style={{ fontSize: 11 }}>Флаги</span>
+              {previewFlags.map((f) => (
+                <button
+                  key={f}
+                  type="button"
+                  className="btn"
+                  style={{ height: 26, fontSize: 11 }}
+                  onClick={() => setPreviewFlags((list) => list.filter((x) => x !== f))}
+                >
+                  {f} ×
+                </button>
+              ))}
+              <input
+                value={flagDraft}
+                placeholder="флаг и Enter"
+                onChange={(e) => setFlagDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  const v = flagDraft.trim();
+                  if (!v) return;
+                  setPreviewFlags((list) => (list.includes(v) ? list : [...list, v]));
+                  setFlagDraft("");
+                }}
+                style={{ ...field, width: 140, marginTop: 0 }}
+              />
+              <label className="muted" style={{ fontSize: 11, display: "flex", alignItems: "center", gap: 4 }}>
+                Ход
+                <input
+                  type="number"
+                  min={1}
+                  value={previewRound}
+                  onChange={(e) => setPreviewRound(Math.max(1, Number(e.target.value) || 1))}
+                  style={{ ...field, width: 64, marginTop: 0 }}
+                />
+              </label>
+              <button
+                type="button"
+                className="btn"
+                style={{ height: 28, fontSize: 11 }}
+                onClick={() => {
+                  setPreviewFlags([]);
+                  setPreviewSeen([]);
+                  setPreviewPopup(null);
+                  setPreviewRound(1);
+                }}
+              >
+                Сбросить
+              </button>
+            </div>
+            <p className="faint" style={{ fontSize: 11, margin: 0 }}>
+              Клик по искре открывает окно игрока. В партию ничего не пишется.
+              {objects.some((o) => {
+                const n = selectedNodeOf(doc, o);
+                return n && !nodeOpen(n, previewFlagMap);
+              })
+                ? ` Скрыто: ${objects
+                    .filter((o) => {
+                      const n = selectedNodeOf(doc, o);
+                      return n && !nodeOpen(n, previewFlagMap);
+                    })
+                    .map((o) => o.label)
+                    .join(", ")}.`
+                : ""}
+            </p>
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+              {exits
+                .filter((e) => {
+                  if (e.requiresFlag && !previewFlagMap[e.requiresFlag]) return false;
+                  if (e.hideIfFlag && previewFlagMap[e.hideIfFlag]) return false;
+                  return true;
+                })
+                .map((e) => {
+                  const to = doc.nodes.find((n) => n.id === e.to);
+                  return (
+                    <span key={e.id} className="btn" style={{ height: 26, fontSize: 11 }}>
+                      {e.label || to?.data.title || "Выход"}
+                    </span>
+                  );
+                })}
+            </div>
+          </div>
+        ) : null}
+
+        {previewPopup ? (
+          <div className="card" style={{ display: "grid", gap: 8, padding: 12 }}>
+            {previewPopup.kind === "inspect" ? (
+              <>
+                <strong style={{ color: "var(--paper)" }}>{previewPopup.title}</strong>
+                {previewPopup.image ? (
+                  <img src={previewPopup.image} alt="" style={{ maxWidth: 240, borderRadius: 8 }} />
+                ) : null}
+                <p style={{ margin: 0, color: "var(--paper)", fontSize: 14 }}>{previewPopup.body}</p>
+              </>
+            ) : (
+              <>
+                <strong style={{ color: "var(--paper)" }}>{previewPopup.name}</strong>
+                {previewPopup.intro ? <p className="muted" style={{ margin: 0 }}>{previewPopup.intro}</p> : null}
+                {previewPopup.chosen ? (
+                  <p style={{ margin: 0, color: "var(--paper)" }}>{previewPopup.chosen}</p>
+                ) : (
+                  previewPopup.options.map((o) => (
+                    <button
+                      key={o.id}
+                      type="button"
+                      className="btn"
+                      onClick={() => setPreviewPopup({ ...previewPopup, chosen: o.reply })}
+                    >
+                      {o.label}
+                    </button>
+                  ))
+                )}
+              </>
+            )}
+            <button type="button" className="btn" style={{ height: 28, fontSize: 11 }} onClick={() => setPreviewPopup(null)}>
+              Закрыть
+            </button>
+          </div>
+        ) : null}
+
         <p className="faint" style={{ fontSize: 11, margin: 0 }}>
           {tool === "spark"
             ? "Клик по фону ставит искру."
@@ -624,8 +809,6 @@ export function SceneEditor({
               onPatch={patchLoc}
               uploading={uploading}
               uploadTo={uploadTo}
-              previewFlag={previewFlag}
-              onPreviewFlag={setPreviewFlag}
             />
           ) : null}
           {selectedNode?.kind === "inspect" && selectedPin ? (
@@ -745,15 +928,11 @@ function RoomInspector({
   onPatch,
   uploading,
   uploadTo,
-  previewFlag,
-  onPreviewFlag,
 }: {
   loc: ScenarioNode;
   onPatch: (d: Partial<ScenarioNode["data"]>) => void;
   uploading: boolean;
   uploadTo: (file: File | undefined, apply: (url: string) => void) => Promise<void>;
-  previewFlag: string;
-  onPreviewFlag: (v: string) => void;
 }) {
   const list = loc.data.backgrounds ?? [];
   const setList = (backgrounds: SceneBackground[], background?: string) => {
@@ -879,12 +1058,6 @@ function RoomInspector({
             }}
           />
         </label>
-        <input
-          value={previewFlag}
-          placeholder="Показать как будто флаг…"
-          onChange={(e) => onPreviewFlag(e.target.value.trim())}
-          style={field}
-        />
       </Section>
     </div>
   );
