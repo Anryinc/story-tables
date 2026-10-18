@@ -3,10 +3,13 @@ import {
   addAssetFromFile,
   addAssetFromUrl,
   deleteAsset,
+  ensureBundledAssets,
   listAssets,
   resolveAssetUrl,
+  type AssetCategory,
   type AssetMeta,
 } from "@/lib/assets/store";
+import { BUNDLED_ASSETS } from "@/lib/assets/bundled";
 
 type Category = "all" | "backgrounds" | "npcs" | "clues" | "items" | "audio";
 
@@ -19,17 +22,19 @@ const CATS: { id: Category; label: string }[] = [
   { id: "audio", label: "Звук" },
 ];
 
-/** Soft tag via name prefix: bg_, npc_, clue_, item_ */
+/** Prefer the stored category; fall back to the name prefix. */
 function matchesCat(m: AssetMeta, cat: Category): boolean {
   if (cat === "all") return true;
-  if (cat === "audio") return m.kind === "audio";
+  if (cat === "audio") return m.kind === "audio" || m.category === "audio";
+  const wanted: AssetCategory =
+    cat === "backgrounds" ? "background" : cat === "npcs" ? "npc" : cat === "clues" ? "clue" : "item";
+  if (m.category) return m.category === wanted;
   const n = m.name.toLowerCase();
-  if (cat === "backgrounds")
-    return m.kind === "image" && (n.startsWith("bg") || n.includes("фон") || true);
-  if (cat === "npcs") return n.startsWith("npc") || n.includes("портрет");
-  if (cat === "clues") return n.startsWith("clue") || n.includes("улик");
-  if (cat === "items") return n.startsWith("item") || n.includes("предмет");
-  return true;
+  if (wanted === "background") return n.startsWith("bg") || n.includes("фон");
+  if (wanted === "npc") return n.startsWith("npc") || n.includes("портрет");
+  if (wanted === "clue") return n.startsWith("clue") || n.includes("улик");
+  if (wanted === "item") return n.startsWith("item") || n.includes("предмет");
+  return false;
 }
 
 export function AssetPanel({
@@ -46,6 +51,7 @@ export function AssetPanel({
   const [cat, setCat] = useState<Category>("all");
 
   const refresh = async () => {
+    ensureBundledAssets(BUNDLED_ASSETS);
     const items = listAssets();
     setList(items);
     const map: Record<string, string> = {};
@@ -101,7 +107,7 @@ export function AssetPanel({
           onChange={async (e) => {
             const f = e.target.files?.[0];
             if (!f) return;
-            await addAssetFromFile(f);
+            await addAssetFromFile(f, { category: cat === "npcs" ? "npc" : cat === "items" ? "item" : cat === "clues" ? "clue" : cat === "audio" ? "audio" : "background" });
             await refresh();
           }}
         />

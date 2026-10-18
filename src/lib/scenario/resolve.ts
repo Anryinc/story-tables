@@ -9,24 +9,38 @@ function freshen(url?: string) {
   return url.replace("/third-bell/ida.jpg", "/third-bell/ida.png");
 }
 
+function dead(url?: string) {
+  return !url || url.startsWith("blob:");
+}
+
 /** If a studio copy was saved before the art, keep the text and put the pictures back. */
 function withBundledArt(stored: ScenarioDocument, bundled: ScenarioDocument): ScenarioDocument {
   const art = new Map(bundled.nodes.map((n) => [n.id, n]));
   const nodes: ScenarioNode[] = stored.nodes.map((n) => {
     const source = art.get(n.id);
     if (!source) return n;
+    const srcPins = source.data.sceneObjects ?? [];
+    const storedPins = n.data.sceneObjects ?? [];
+    const pins = storedPins.length === 0
+      ? srcPins
+      : storedPins.map((o) => {
+          const src = srcPins.find((s) => s.id === o.id || s.linkNodeId === o.linkNodeId);
+          return {
+            ...o,
+            url: dead(o.url) ? src?.url : o.url,
+            percent: o.percent ?? src?.percent ?? true,
+          };
+        });
     return {
       ...n,
       data: {
         ...n.data,
-        background: n.data.background || source.data.background,
-        portraitUrl: freshen(n.data.portraitUrl || source.data.portraitUrl),
-        imageUrl: n.data.imageUrl || source.data.imageUrl,
+        background: dead(n.data.background) ? source.data.background : n.data.background,
+        backgrounds: n.data.backgrounds?.length ? n.data.backgrounds : source.data.backgrounds,
+        portraitUrl: freshen(dead(n.data.portraitUrl) ? source.data.portraitUrl : n.data.portraitUrl),
+        imageUrl: dead(n.data.imageUrl) ? source.data.imageUrl : n.data.imageUrl,
         grantItem: n.data.grantItem ?? source.data.grantItem,
-        sceneObjects: (n.data.sceneObjects && n.data.sceneObjects.length > 0
-          ? n.data.sceneObjects
-          : source.data.sceneObjects
-        )?.map((o) => ({ ...o, url: freshen(o.url) })),
+        sceneObjects: pins.map((o) => ({ ...o, url: freshen(o.url) })),
       },
     };
   });
@@ -35,9 +49,16 @@ function withBundledArt(stored: ScenarioDocument, bundled: ScenarioDocument): Sc
     nodes,
     manifest: {
       ...stored.manifest,
-      coverImage: stored.manifest.coverImage || bundled.manifest.coverImage,
+      coverImage: dead(stored.manifest.coverImage)
+        ? bundled.manifest.coverImage
+        : stored.manifest.coverImage,
     },
   };
+}
+
+export function restoreBundledArt(doc: ScenarioDocument): ScenarioDocument {
+  const bundled = getBundledScenario(doc.manifest.id);
+  return bundled ? withBundledArt(doc, bundled) : doc;
 }
 
 /** localStorage overrides the copy shipped in the repo. */

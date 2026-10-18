@@ -33,7 +33,7 @@ export function CharactersPanel({
     if (!file || !file.type.startsWith("image/")) return;
     setUploading(charId);
     try {
-      const meta = await addAssetFromFile(file);
+      const meta = await addAssetFromFile(file, { category: "npc", name: `npc_${file.name}` });
       const url = await resolveAssetUrl(meta);
       if (url) {
         update(charId, { portraitUrl: url, portraitAssetId: meta.id });

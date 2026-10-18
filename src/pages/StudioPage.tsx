@@ -8,6 +8,9 @@ import { NodeCanvas } from "@/components/NodeCanvas";
 import { PreviewPanel } from "@/components/PreviewPanel";
 import { SceneEditor } from "@/components/SceneEditor";
 import { TimelineStrip } from "@/components/TimelineStrip";
+import { BUNDLED_ASSETS } from "@/lib/assets/bundled";
+import { ensureBundledAssets } from "@/lib/assets/store";
+import { restoreBundledArt } from "@/lib/scenario/resolve";
 import {
   exportScenarioJson,
   getStoredScenario,
@@ -35,8 +38,11 @@ export function StudioPage() {
   const [floatSceneLocId, setFloatSceneLocId] = useState<string | null>(null);
 
   useEffect(() => {
-    const s = getStoredScenario(projectId);
+    ensureBundledAssets(BUNDLED_ASSETS);
+    const stored = getStoredScenario(projectId);
+    const s = stored ? restoreBundledArt(stored) : null;
     setDoc(s);
+    if (s && stored && JSON.stringify(s) !== JSON.stringify(stored)) saveScenario(s);
     const firstLoc = s?.nodes.find((n) => n.kind === "location");
     if (firstLoc) setSceneLocId(firstLoc.id);
   }, [projectId]);

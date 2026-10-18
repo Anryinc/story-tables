@@ -285,7 +285,7 @@ export function NodeCanvas({
     if (!file?.type.startsWith("image/")) return;
     setUploadingBg(true);
     try {
-      const meta = await addAssetFromFile(file);
+      const meta = await addAssetFromFile(file, { category: "background", name: `bg_${file.name}` });
       const url = await resolveAssetUrl(meta);
       if (url) {
         updateNode(locId, {

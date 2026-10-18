@@ -354,13 +354,17 @@ export function SceneEditor({
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  const uploadTo = async (file: File | undefined, apply: (url: string) => void) => {
+  const uploadTo = async (
+    file: File | undefined,
+    apply: (url: string, assetId: string) => void,
+    category: "background" | "npc" | "item" = "item",
+  ) => {
     if (!file?.type.startsWith("image/")) return;
     setUploading(true);
     try {
-      const meta = await addAssetFromFile(file);
+      const meta = await addAssetFromFile(file, { category });
       const url = await resolveAssetUrl(meta);
-      if (url) apply(url);
+      if (url) apply(url, meta.id);
     } finally {
       setUploading(false);
     }
@@ -387,17 +391,21 @@ export function SceneEditor({
               type="file"
               accept="image/*"
               onChange={(e) => {
-                void uploadTo(e.target.files?.[0], (url) => {
-                  const next = [
-                    ...(loc.data.backgrounds ?? []),
-                    {
-                      id: `bg_${Math.random().toString(36).slice(2, 7)}`,
-                      name: loc.data.backgrounds?.length ? `Фон ${loc.data.backgrounds.length + 1}` : "Основной",
-                      url,
-                    },
-                  ];
-                  patchLoc({ backgrounds: next, background: next[0].url });
-                });
+                void uploadTo(
+                  e.target.files?.[0],
+                  (url) => {
+                    const next = [
+                      ...(loc.data.backgrounds ?? []),
+                      {
+                        id: `bg_${Math.random().toString(36).slice(2, 7)}`,
+                        name: loc.data.backgrounds?.length ? `Фон ${loc.data.backgrounds.length + 1}` : "Основной",
+                        url,
+                      },
+                    ];
+                    patchLoc({ backgrounds: next, background: next[0].url });
+                  },
+                  "background",
+                );
                 e.target.value = "";
               }}
             />
@@ -932,7 +940,7 @@ function RoomInspector({
   loc: ScenarioNode;
   onPatch: (d: Partial<ScenarioNode["data"]>) => void;
   uploading: boolean;
-  uploadTo: (file: File | undefined, apply: (url: string) => void) => Promise<void>;
+  uploadTo: (file: File | undefined, apply: (url: string, assetId: string) => void, category?: "background" | "npc" | "item") => Promise<void>;
 }) {
   const list = loc.data.backgrounds ?? [];
   const setList = (backgrounds: SceneBackground[], background?: string) => {
@@ -1053,7 +1061,7 @@ function RoomInspector({
             type="file"
             accept="image/*"
             onChange={(e) => {
-              void uploadTo(e.target.files?.[0], addBg);
+              void uploadTo(e.target.files?.[0], addBg, "background");
               e.target.value = "";
             }}
           />
@@ -1076,7 +1084,7 @@ function SparkInspector({
   onNode: (d: Partial<ScenarioNode["data"]>) => void;
   onPin: (d: Partial<SceneObject>) => void;
   onDelete: () => void;
-  uploadTo: (file: File | undefined, apply: (url: string) => void) => Promise<void>;
+  uploadTo: (file: File | undefined, apply: (url: string, assetId: string) => void, category?: "background" | "npc" | "item") => Promise<void>;
 }) {
   const d = node.data;
   return (
@@ -1106,7 +1114,7 @@ function SparkInspector({
             type="file"
             accept="image/*"
             onChange={(e) => {
-              void uploadTo(e.target.files?.[0], (url) => onNode({ imageUrl: url }));
+              void uploadTo(e.target.files?.[0], (url) => onNode({ imageUrl: url }), "item");
               e.target.value = "";
             }}
           />
@@ -1204,7 +1212,7 @@ function NpcInspector({
   onNode: (d: Partial<ScenarioNode["data"]>) => void;
   onPin: (d: Partial<SceneObject>) => void;
   onDelete: () => void;
-  uploadTo: (file: File | undefined, apply: (url: string) => void) => Promise<void>;
+  uploadTo: (file: File | undefined, apply: (url: string, assetId: string) => void, category?: "background" | "npc" | "item") => Promise<void>;
 }) {
   const d = node.data;
   const lines = d.talkOptions ?? [];
@@ -1238,10 +1246,14 @@ function NpcInspector({
             type="file"
             accept="image/*"
             onChange={(e) => {
-              void uploadTo(e.target.files?.[0], (url) => {
-                onNode({ portraitUrl: url });
-                onPin({ url });
-              });
+              void uploadTo(
+                e.target.files?.[0],
+                (url) => {
+                  onNode({ portraitUrl: url });
+                  onPin({ url });
+                },
+                "npc",
+              );
               e.target.value = "";
             }}
           />
