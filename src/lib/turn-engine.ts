@@ -43,6 +43,8 @@ function intentKey(i: ActionIntent): string {
       return `share:${i.clueId}`;
     case "ability":
       return `ability:${i.abilityId}`;
+    case "give":
+      return `give:${i.itemId}:${i.toClientId}`;
   }
 }
 
@@ -79,6 +81,12 @@ export class TurnEngine {
   private itemsOf = new Map<string, InventoryItem[]>();
   private statesOf = new Map<string, ActorState[]>();
   private worldClaimed = new Set<string>();
+  private lastAbilityInLoc = new Map<string, string>();
+  private borrowed = new Map<string, { id: string; until: number }[]>();
+  private oathedNpcs = new Set<string>();
+  private sealedExits = new Map<string, number>();
+  private hiddenSight = new Map<string, number>();
+  private backgroundShift = new Map<string, number>();
 
   constructor(
     code: string,
@@ -209,7 +217,11 @@ export class TurnEngine {
       return { ok: false as const, error: "В графе нет стартовой локации" };
     }
     for (const s of players) {
-      this.locationOf.set(s.clientId, start);
+      const ch = s.characterId ? this.charById(s.characterId) : null;
+      const startFor = ch?.startLocationId && this.graph.locations[ch.startLocationId]
+        ? ch.startLocationId
+        : start;
+      this.locationOf.set(s.clientId, startFor);
       this.cluesOf.set(s.clientId, []);
       this.journalOf.set(s.clientId, []);
       this.inspected.set(s.clientId, new Set());
@@ -230,6 +242,11 @@ export class TurnEngine {
     this.intents.clear();
     this.lastPublicEvent = "Дело открыто.";
     this.fireTimelineForRound(1);
+    for (const s of players) {
+      const loc = this.locationOf.get(s.clientId);
+      if (loc) this.firePresences(s.clientId, loc, "enter");
+      this.firePassives(s.clientId);
+    }
     this.emit();
     return { ok: true as const };
   }
@@ -242,6 +259,12 @@ export class TurnEngine {
       (a) => intentKey(a.intent) === intentKey(intent),
     );
     if (!ok) return { ok: false as const, error: "Действие недоступно" };
+    if (intent.type === "ability") {
+      const until = this.abilityCooldown.get(clientId)?.get(intent.abilityId);
+      if (until != null && until >= this.round) {
+        return { ok: false as const, error: "Сила ещё остывает" };
+      }
+    }
     this.intents.set(clientId, intent);
     this.emit();
     if (this.players().every((s) => this.intents.has(s.clientId)))
@@ -337,6 +360,21 @@ export class TurnEngine {
     ].slice(0, 80));
   }
 
+  private resolveGive(clientId: string, itemId: string, toClientId: string) {
+    const bag = this.itemsOf.get(clientId) ?? [];
+    const item = bag.find((i) => i.id === itemId);
+    if (!item) return;
+    const loc = this.locationOf.get(clientId);
+    if (!loc || this.locationOf.get(toClientId) !== loc) return;
+    this.itemsOf.set(clientId, bag.filter((i) => i.id !== itemId));
+    this.addItem(toClientId, item);
+    const to = this.seats.find((s) => s.clientId === toClientId);
+    this.pushJournal(clientId, "Отдали", `${item.title} → ${to?.displayName ?? "игроку"}`);
+    this.pushJournal(toClientId, "Получили", item.title);
+    this.lastResultOf.set(clientId, `Вы отдали «${item.title}».`);
+    this.pushPopup(toClientId, item.title, `${this.seats.find((s) => s.clientId === clientId)?.displayName ?? "Кто-то"} отдал вам предмет.`, this.round, item.imageUrl);
+  }
+
   private addItem(clientId: string, item: InventoryItem) {
     const bag = this.itemsOf.get(clientId) ?? [];
     if (bag.some((i) => i.id === item.id)) return;
@@ -344,9 +382,48 @@ export class TurnEngine {
   }
 
   private addState(clientId: string, state: ActorState) {
-    const bag = this.statesOf.get(clientId) ?? [];
-    if (bag.some((s) => s.id === state.id)) return;
+    const bag = (this.statesOf.get(clientId) ?? []).filter((s) => s.id !== state.id);
     this.statesOf.set(clientId, [...bag, state]);
+  }
+
+  private clearStatus(clientId: string, statusId?: string, kind?: ActorState["kind"]) {
+    const bag = this.statesOf.get(clientId) ?? [];
+    this.statesOf.set(
+      clientId,
+      bag.filter((s) => (statusId ? s.id !== statusId : kind ? s.kind !== kind : false)),
+    );
+  }
+
+  private blocked(clientId: string, action: "move" | "talk" | "inspect" | "ability"): string | null {
+    const hit = (this.statesOf.get(clientId) ?? []).find((s) => s.blocks?.includes(action));
+    return hit ? hit.title : null;
+  }
+
+  private firePassives(clientId: string) {
+    const base = getLoreBase(this.loreBaseId);
+    if (!base) return;
+    for (const id of this.heldAbilityIds(clientId)) {
+      const ab = findAbility(base, id);
+      if (!ab || ab.kind !== "passive") continue;
+      if (this.hiddenSight.get(clientId) != null) continue;
+      if (ab.mechanics.effects.some((fx) => fx.type === "reveal_hidden")) {
+        this.hiddenSight.set(clientId, 9999);
+      }
+    }
+  }
+
+  private seesHidden(clientId: string): boolean {
+    const until = this.hiddenSight.get(clientId);
+    return until != null && until >= this.round;
+  }
+
+  private expireStatuses() {
+    for (const [id, bag] of this.statesOf) {
+      this.statesOf.set(
+        id,
+        bag.filter((s) => s.untilRound == null || s.untilRound > this.round),
+      );
+    }
   }
 
   private stateIds(clientId: string) {
@@ -423,6 +500,12 @@ export class TurnEngine {
     for (const s of players) {
       const intent = this.intents.get(s.clientId);
       if (intent?.type !== "move") continue;
+      const bound = this.blocked(s.clientId, "move");
+      if (bound) {
+        this.pushJournal(s.clientId, "Не вышло", `Мешает: ${bound}`);
+        this.lastResultOf.set(s.clientId, `Нельзя идти. Мешает: ${bound}.`);
+        continue;
+      }
       const loc = this.locationOf.get(s.clientId);
       if (!loc) continue;
       if (
@@ -435,6 +518,8 @@ export class TurnEngine {
         const name = locationName(this.graph, intent.toLocationId);
         this.pushJournal(s.clientId, "Перемещение", name);
         this.lastResultOf.set(s.clientId, `Вы в локации: ${name}`);
+        this.firePresences(s.clientId, intent.toLocationId, "enter");
+        this.fireReactions(s.clientId, "enter");
       }
     }
     for (const s of players) {
@@ -444,18 +529,27 @@ export class TurnEngine {
         this.pushJournal(s.clientId, "Ожидание", "Ничего не делали.");
         this.lastResultOf.set(s.clientId, "Вы ждали.");
       } else if (intent.type === "inspect") {
-        this.resolveInspect(s.clientId, intent.targetId);
+        const bound = this.blocked(s.clientId, "inspect");
+        if (bound) this.lastResultOf.set(s.clientId, `Нельзя осмотреть. Мешает: ${bound}.`);
+        else this.resolveInspect(s.clientId, intent.targetId);
       } else if (intent.type === "talk") {
-        this.resolveTalk(s.clientId, intent.npcId, intent.optionId);
+        const bound = this.blocked(s.clientId, "talk");
+        if (bound) this.lastResultOf.set(s.clientId, `Нельзя говорить. Мешает: ${bound}.`);
+        else this.resolveTalk(s.clientId, intent.npcId, intent.optionId);
       } else if (intent.type === "share") {
         this.resolveShare(s.clientId, intent.clueId);
       } else if (intent.type === "ability") {
-        this.resolveAbility(s.clientId, intent.abilityId, intent.targetLabel);
+        const bound = this.blocked(s.clientId, "ability");
+        if (bound) this.lastResultOf.set(s.clientId, `Нельзя применить силу. Мешает: ${bound}.`);
+        else this.resolveAbility(s.clientId, intent.abilityId, intent.targetLabel, false, intent.targetId);
+      } else if (intent.type === "give") {
+        this.resolveGive(s.clientId, intent.itemId, intent.toClientId);
       }
     }
     this.intents.clear();
     const closed = this.round;
     this.round += 1;
+    this.expireStatuses();
     for (const [, map] of this.abilityCooldown) {
       for (const [aid, until] of [...map.entries()]) {
         if (until < this.round) map.delete(aid);
@@ -463,18 +557,26 @@ export class TurnEngine {
     }
     this.lastPublicEvent = `Раунд ${closed} закрыт.`;
     this.fireTimelineForRound(this.round);
+    for (const s of this.players()) {
+      const loc = this.locationOf.get(s.clientId);
+      if (loc) this.firePresences(s.clientId, loc, "round");
+      this.firePassives(s.clientId);
+    }
     this.emit();
   }
 
-  private resolveAbility(clientId: string, abilityId: string, targetLabel?: string) {
-    const seat = this.seats.find((s) => s.clientId === clientId);
-    if (!seat?.characterId) return;
-    const ch = this.charById(seat.characterId);
-    if (!ch?.lore) return;
-    const base = getLoreBase(ch.lore.baseId || this.loreBaseId);
+  private resolveAbility(clientId: string, abilityId: string, targetLabel?: string, asNpc = false, targetId?: string) {
+    const base = getLoreBase(this.loreBaseId);
     if (!base) return;
     const ab = findAbility(base, abilityId);
     if (!ab) return;
+    if (!asNpc) {
+      const seat = this.seats.find((s) => s.clientId === clientId);
+      if (!seat?.characterId) return;
+      const held = this.heldAbilityIds(clientId).includes(abilityId);
+      const carried = this.itemAbilityIds(clientId).includes(abilityId);
+      if (!held && !carried) return;
+    }
     if (ab.mechanics.requiresFlags?.some((f) => !this.flags[f])) return;
     if (ab.mechanics.oncePerGame && this.flags[`ability_used:${abilityId}`]) return;
 
@@ -515,11 +617,136 @@ export class TurnEngine {
         });
       } else if (fx.type === "unlock_location") {
         this.flags[`unlock_${fx.locationId}`] = true;
+      } else if (fx.type === "copy_last_ability") {
+        const loc = this.locationOf.get(clientId);
+        const src = loc ? this.lastAbilityInLoc.get(loc) : undefined;
+        if (src && src !== abilityId) {
+          const list = this.borrowed.get(clientId) ?? [];
+          list.push({ id: src, until: this.round + Math.max(1, fx.rounds) });
+          this.borrowed.set(clientId, list);
+          this.pushPopup(clientId, ab.nameRu, `На ход ваша: ${src}.`, this.round);
+        } else {
+          this.pushPopup(clientId, ab.nameRu, "Рядом ещё никто не применял силу, копировать нечего.", this.round);
+        }
+      } else if (fx.type === "steal_memory") {
+        const fromId = targetId && this.seats.some((s) => s.clientId === targetId)
+          ? targetId
+          : this.seats.find((s) => s.displayName === targetLabel)?.clientId;
+        const from = this.seats.find((s) => s.clientId === fromId);
+        const bag = fromId ? this.memoriesOf.get(fromId) ?? [] : [];
+        const mem = bag[0];
+        if (mem) {
+          this.addMemory(clientId, {
+            ...mem,
+            id: `stolen:${mem.id}:${this.round}`,
+            title: `Сон: ${mem.title}`,
+            source: from?.displayName ?? "Чужой сон",
+          });
+          this.memoriesOf.set(fromId!, bag.filter((m) => m.id !== mem.id));
+          this.pushPopup(clientId, ab.nameRu, `Вы унесли «${mem.title}». У хозяина её больше нет.`, this.round);
+          this.pushPopup(fromId!, "Пробел", `Кто-то унёс воспоминание «${mem.title}».`, this.round);
+        } else {
+          this.pushPopup(clientId, ab.nameRu, "У цели нет воспоминаний.", this.round);
+        }
+      } else if (fx.type === "travel") {
+        const dest = targetId && this.graph.locations[targetId] ? targetId : undefined;
+        if (dest && this.graph.locations[dest] && !this.isLocationLocked(dest)) {
+          this.locationOf.set(clientId, dest);
+          const name = locationName(this.graph, dest);
+          this.pushJournal(clientId, "Шаг сквозь", name);
+          this.pushPopup(clientId, ab.nameRu, `Вы в локации: ${name}`, this.round);
+          this.firePresences(clientId, dest, "enter");
+        } else {
+          this.pushPopup(clientId, ab.nameRu, "Туда шаг не открыт.", this.round);
+        }
+      } else if (fx.type === "borrow_neighbor") {
+        const seat = this.seats.find((s) => s.clientId === clientId);
+        const ch = seat?.characterId ? this.charById(seat.characterId) : null;
+        const neighbor = ch?.lore?.neighborPathwayId;
+        if (!neighbor || !base) {
+          this.pushPopup(clientId, ab.nameRu, "Соседний путь не выбран. Вживаться не во что.", this.round);
+        } else {
+          const ids = abilityIdsForSequence(base, neighbor, ch?.lore?.sequenceRank ?? 9);
+          const list = this.borrowed.get(clientId) ?? [];
+          for (const id of ids) list.push({ id, until: this.round + Math.max(1, fx.rounds) });
+          this.borrowed.set(clientId, list);
+          this.pushPopup(clientId, ab.nameRu, "На ход соседние силы стали вашими кнопками.", this.round);
+        }
+      } else if (fx.type === "apply_status") {
+        const who = targetId && this.seats.some((s) => s.clientId === targetId) ? targetId : clientId;
+        this.addState(who, {
+          id: fx.status.id,
+          title: fx.status.title,
+          body: fx.status.body,
+          kind: fx.status.kind ?? "mark",
+          blocks: fx.status.blocks,
+          untilRound: fx.status.rounds ? this.round + fx.status.rounds : undefined,
+        });
+        this.pushPopup(who, fx.status.title, fx.status.body, this.round);
+      } else if (fx.type === "clear_status") {
+        const who = targetId && this.seats.some((s) => s.clientId === targetId) ? targetId : clientId;
+        this.clearStatus(who, fx.statusId, fx.kind);
+        this.pushPopup(who, ab.nameRu, "Состояние снято.", this.round);
+      } else if (fx.type === "bind_oath") {
+        const loc = this.locationOf.get(clientId);
+        const npcs = loc ? this.graph.locations[loc]?.npcs ?? [] : [];
+        for (const n of npcs) this.oathedNpcs.add(n.id);
+        this.pushPopup(
+          clientId,
+          ab.nameRu,
+          npcs.length ? "Неписи здесь под клятвой. Правда и ложь в их репликах подсвечены." : "Здесь некого связывать клятвой.",
+          this.round,
+        );
+      } else if (fx.type === "seal_exits") {
+        const loc = this.locationOf.get(clientId);
+        if (loc) this.sealedExits.set(loc, this.round + Math.max(1, fx.rounds));
+        this.pushPopup(clientId, ab.nameRu, "Выходы этой комнаты закрыты приговором.", this.round);
+      } else if (fx.type === "open_doors") {
+        const loc = this.locationOf.get(clientId);
+        const exits = loc ? this.graph.locations[loc]?.exits ?? [] : [];
+        for (const e of exits) {
+          if (e.requiresFlag) this.flags[e.requiresFlag] = true;
+          if (e.requiresAnyFlags) for (const f of e.requiresAnyFlags) this.flags[f] = true;
+        }
+        if (loc) this.sealedExits.delete(loc);
+        this.pushPopup(
+          clientId,
+          ab.nameRu,
+          exits.length ? "Граница поддалась. Закрытые выходы этой комнаты открыты." : "Здесь нечего открывать.",
+          this.round,
+        );
+      } else if (fx.type === "reveal_hidden") {
+        this.hiddenSight.set(clientId, fx.rounds ? this.round + fx.rounds : 9999);
+        this.pushPopup(clientId, ab.nameRu, "Скрытое в этой комнате на время видно.", this.round);
+      } else if (fx.type === "shift_background") {
+        const loc = this.locationOf.get(clientId);
+        if (loc) this.backgroundShift.set(loc, (this.backgroundShift.get(loc) ?? 0) + 1);
+        this.pushPopup(clientId, ab.nameRu, "Комната изменилась.", this.round);
+      } else if (fx.type === "clear_flags") {
+        for (const f of fx.flags) delete this.flags[f];
+        this.pushPopup(clientId, ab.nameRu, "Полоса сбита.", this.round);
+      } else if (fx.type === "consume_spark") {
+        if (targetId) this.worldClaimed.add(targetId);
+        this.pushPopup(clientId, ab.nameRu, "Изъян доведён. Вещь больше не та.", this.round);
+      } else if (fx.type === "room_status") {
+        const loc = this.locationOf.get(clientId);
+        for (const s of this.players()) {
+          if (this.locationOf.get(s.clientId) !== loc) continue;
+          this.addState(s.clientId, {
+            id: fx.status.id,
+            title: fx.status.title,
+            body: fx.status.body,
+            kind: fx.status.kind ?? "mark",
+            blocks: fx.status.blocks,
+            untilRound: fx.status.rounds ? this.round + fx.status.rounds : undefined,
+          });
+        }
+        this.pushPopup(clientId, ab.nameRu, "Легло на всех, кто здесь.", this.round);
       }
     }
     this.setFlags(ab.mechanics.setsFlags);
-    const cd = ab.mechanics.cooldownRounds ?? 0;
-    if (cd > 0) {
+    const cd = this.cooldownFor(abilityId);
+    if (cd > 0 && ab.kind !== "passive") {
       const map = this.abilityCooldown.get(clientId) ?? new Map();
       map.set(abilityId, this.round + cd);
       this.abilityCooldown.set(clientId, map);
@@ -528,6 +755,16 @@ export class TurnEngine {
     const used = this.usedAbilities.get(clientId) ?? new Set();
     used.add(abilityId);
     this.usedAbilities.set(clientId, used);
+    const locNow = this.locationOf.get(clientId);
+    if (locNow && ab.kind !== "reaction") this.lastAbilityInLoc.set(locNow, abilityId);
+    if (!asNpc) this.fireReactions(clientId, "ability");
+  }
+
+  /** 9 → 1 ход, 8 → 2, …, 4 → 6. */
+  private cooldownFor(abilityId: string): number {
+    const rank = Number(abilityId.split(".")[1]);
+    if (!Number.isFinite(rank) || rank < 4 || rank > 9) return 1;
+    return 10 - rank;
   }
 
   private resolveInspect(clientId: string, targetId: string) {
@@ -542,6 +779,8 @@ export class TurnEngine {
       this.worldClaimed,
       this.stateIds(clientId),
       this.openAbilities(clientId),
+      new Set((this.memoriesOf.get(clientId) ?? []).map((m) => m.id)),
+      this.seesHidden(clientId),
     ).find((x) => x.id === targetId);
     if (!t) {
       this.lastResultOf.set(clientId, "Уже не на что смотреть.");
@@ -561,10 +800,14 @@ export class TurnEngine {
     });
     if (t.clue) this.addClue(clientId, t.clue);
     if (t.item) this.addItem(clientId, t.item);
-    if (t.grantState) this.addState(clientId, t.grantState);
+    if (t.grantState) this.addState(clientId, {
+      ...t.grantState,
+      kind: t.grantState.kind ?? "mark",
+    });
     this.pushJournal(clientId, t.label, t.result);
     this.lastResultOf.set(clientId, t.result);
     this.pushPopup(clientId, t.clue?.title ?? t.label, t.result, this.round, t.image ?? t.item?.imageUrl);
+    this.fireReactions(clientId, "inspect");
   }
 
   private resolveTalk(clientId: string, npcId: string, optionId: string) {
@@ -573,7 +816,7 @@ export class TurnEngine {
     const npc = availableNpcs(this.graph, loc, this.flags).find((n) => n.id === npcId);
     if (!npc) return;
     const used = this.talkUsed.get(clientId) ?? new Set();
-    const opt = availableTalkOptions(npc, this.flags, used).find(
+    const opt = availableTalkOptions(npc, this.flags, used, this.oathedNpcs.has(npcId)).find(
       (o) => o.id === optionId,
     );
     if (!opt) return;
@@ -599,6 +842,8 @@ export class TurnEngine {
     this.pushJournal(clientId, `${npc.name}: ${opt.label}`, opt.reply);
     this.lastResultOf.set(clientId, opt.reply);
     this.pushPopup(clientId, npc.name, opt.reply, this.round, npc.portraitUrl);
+    if (opt.usesAbilityId) this.resolveAbility(clientId, opt.usesAbilityId, undefined, true);
+    this.fireReactions(clientId, "talk");
   }
 
   private resolveShare(clientId: string, clueId: string) {
@@ -635,8 +880,60 @@ export class TurnEngine {
   private heldAbilityIds(clientId: string): string[] {
     const seat = this.seats.find((s) => s.clientId === clientId);
     const ch = seat?.characterId ? this.charById(seat.characterId) : null;
-    if (!ch?.lore) return [];
-    return ch.lore.enabledAbilityIds ?? [];
+    const own = ch?.lore?.enabledAbilityIds ?? [];
+    const extra = (this.borrowed.get(clientId) ?? [])
+      .filter((b) => b.until >= this.round)
+      .map((b) => b.id);
+    return [...own, ...extra];
+  }
+
+  private firedPresence = new Map<string, Set<string>>();
+
+  private fireReactions(actorId: string, trigger: "inspect" | "talk" | "enter" | "ability") {
+    const loc = this.locationOf.get(actorId);
+    if (!loc) return;
+    const base = getLoreBase(this.loreBaseId);
+    if (!base) return;
+    for (const s of this.players()) {
+      if (this.locationOf.get(s.clientId) !== loc) continue;
+      for (const id of this.heldAbilityIds(s.clientId)) {
+        const ab = findAbility(base, id);
+        if (!ab || ab.kind !== "reaction" || ab.on !== trigger) continue;
+        const cd = this.abilityCooldown.get(s.clientId)?.get(id);
+        if (cd != null && cd >= this.round) continue;
+        this.resolveAbility(s.clientId, id, undefined, false);
+      }
+    }
+  }
+
+  private firePresences(clientId: string, locationId: string, trigger: "enter" | "round") {
+    const list = this.graph.locations[locationId]?.presences ?? [];
+    const open = this.openAbilities(clientId);
+    const seen = this.firedPresence.get(clientId) ?? new Set();
+    for (const p of list) {
+      if (p.trigger !== trigger) continue;
+      if (!gateOpen(p, this.flags)) continue;
+      if (p.requiresAbilityId && !open.has(p.requiresAbilityId)) continue;
+      if (p.once !== false && seen.has(p.id)) continue;
+      seen.add(p.id);
+      this.setFlags(p.setFlags);
+      this.pushPopup(clientId, p.title, p.body, this.round);
+      this.pushJournal(clientId, p.title, p.body);
+      this.addMemory(clientId, {
+        id: p.clue?.id ?? p.id,
+        title: p.clue?.title ?? p.title,
+        body: p.body,
+        source: p.clue?.source ?? "Присутствие",
+      });
+      if (p.clue) this.addClue(clientId, p.clue);
+    }
+    this.firedPresence.set(clientId, seen);
+  }
+
+  private itemAbilityIds(clientId: string): string[] {
+    return (this.itemsOf.get(clientId) ?? [])
+      .map((i) => i.abilityId)
+      .filter((id): id is string => Boolean(id));
   }
 
   /** Passive powers are open immediately. Active ones open after this player uses them. */
@@ -644,7 +941,8 @@ export class TurnEngine {
     const base = getLoreBase(this.loreBaseId);
     const used = this.usedAbilities.get(clientId) ?? new Set();
     const open = new Set<string>();
-    for (const id of this.heldAbilityIds(clientId)) {
+    const ids = [...this.heldAbilityIds(clientId), ...this.itemAbilityIds(clientId)];
+    for (const id of ids) {
       const ab = base ? findAbility(base, id) : null;
       if (!ab) continue;
       if ((ab.kind ?? "active") === "passive" || used.has(id)) open.add(id);
@@ -663,6 +961,8 @@ export class TurnEngine {
     ];
     for (const e of availableExits(this.graph, loc, this.flags)) {
       if (this.isLocationLocked(e.to)) continue;
+      const sealedUntil = this.sealedExits.get(loc);
+      if (sealedUntil != null && sealedUntil >= this.round) continue;
       opts.push({
         id: `move:${e.to}`,
         intent: { type: "move", toLocationId: e.to },
@@ -680,6 +980,8 @@ export class TurnEngine {
       this.worldClaimed,
       this.stateIds(clientId),
       open,
+      new Set((this.memoriesOf.get(clientId) ?? []).map((m) => m.id)),
+      this.seesHidden(clientId),
     )) {
       opts.push({
         id: `inspect:${t.id}`,
@@ -689,7 +991,7 @@ export class TurnEngine {
     }
     const used = this.talkUsed.get(clientId) ?? new Set();
     for (const npc of availableNpcs(this.graph, loc, this.flags, open)) {
-      for (const o of availableTalkOptions(npc, this.flags, used)) {
+      for (const o of availableTalkOptions(npc, this.flags, used, this.oathedNpcs.has(npc.id))) {
         opts.push({
           id: `talk:${npc.id}:${o.id}`,
           intent: { type: "talk", npcId: npc.id, optionId: o.id },
@@ -699,28 +1001,52 @@ export class TurnEngine {
     }
 
     const ch = this.charById(seat.characterId);
-    if (ch?.lore) {
-      const base = getLoreBase(ch.lore.baseId || this.loreBaseId);
-      const ids = ch.lore.enabledAbilityIds ?? [];
+    if (ch?.lore || (this.borrowed.get(clientId) ?? []).length) {
+      const base = getLoreBase(ch?.lore?.baseId || this.loreBaseId);
+      const ids = this.heldAbilityIds(clientId);
       const cdMap = this.abilityCooldown.get(clientId) ?? new Map();
+      const seenIds = new Set<string>();
       for (const aid of ids) {
+        if (seenIds.has(aid)) continue;
+        seenIds.add(aid);
         const ab = base ? findAbility(base, aid) : null;
         if (!ab) continue;
-        if ((ab.kind ?? "active") === "passive") continue;
+        if ((ab.kind ?? "active") !== "active") continue;
         if (ab.mechanics.requiresFlags?.some((f) => !this.flags[f])) continue;
         if (ab.mechanics.oncePerGame && this.flags[`ability_used:${aid}`]) continue;
         const until = cdMap.get(aid);
-        if (until != null && until >= this.round) continue;
+        const left = until != null && until >= this.round ? until - this.round + 1 : 0;
         opts.push({
           id: `ability:${aid}`,
           intent: { type: "ability", abilityId: aid },
           label: `✧ ${ab.nameRu}`,
-          detail: ab.target && ab.target !== "none"
-            ? `${ab.descriptionRu} Нужна цель.`
-            : ab.descriptionRu,
-          needsTarget: ab.target && ab.target !== "none" ? ab.target : undefined,
+          detail: left
+            ? `Ещё ${left} ${left === 1 ? "ход" : "хода"}. ${ab.descriptionRu}`
+            : ab.target && ab.target !== "none"
+              ? `${ab.descriptionRu} Нужна цель.`
+              : ab.descriptionRu,
+          needsTarget: left ? undefined : ab.target && ab.target !== "none" ? ab.target : undefined,
+          cooldownLeft: left || undefined,
         });
       }
+    }
+
+    for (const item of this.itemsOf.get(clientId) ?? []) {
+      if (!item.abilityId) continue;
+      const base = getLoreBase(this.loreBaseId);
+      const ab = base ? findAbility(base, item.abilityId) : null;
+      if (!ab || (ab.kind ?? "active") === "passive") continue;
+      if (ab.mechanics.oncePerGame && this.flags[`ability_used:${item.abilityId}`]) continue;
+      const cdMap = this.abilityCooldown.get(clientId) ?? new Map();
+      const until = cdMap.get(item.abilityId);
+      if (until != null && until >= this.round) continue;
+      opts.push({
+        id: `ability:${item.abilityId}`,
+        intent: { type: "ability", abilityId: item.abilityId },
+        label: `✧ ${ab.nameRu}`,
+        detail: `${item.title}. ${ab.descriptionRu}`,
+        needsTarget: ab.target && ab.target !== "none" ? ab.target : undefined,
+      });
     }
 
     return opts;
@@ -766,7 +1092,16 @@ export class TurnEngine {
       .filter(
         (s) => s.clientId !== clientId && this.locationOf.get(s.clientId) === loc,
       )
-      .map((s) => ({ clientId: s.clientId, name: s.displayName }));
+      .map((s) => {
+        const ch = s.characterId ? this.charById(s.characterId) : null;
+        return {
+          clientId: s.clientId,
+          name: ch?.givenName || s.displayName,
+          portraitUrl: ch?.portraitUrl,
+          appearance: ch?.appearance,
+          givenName: ch?.givenName,
+        };
+      });
     const hereNpcs = loc
       ? availableNpcs(this.graph, loc, this.flags, this.openAbilities(clientId)).map((n) => ({
           id: n.id,
@@ -794,7 +1129,7 @@ export class TurnEngine {
       myLocationDescription: loc
         ? (this.graph.locations[loc]?.description ?? null)
         : null,
-      myLocationImage: loc ? pickLocationImage(this.graph.locations[loc], this.flags, this.round) : null,
+      myLocationImage: loc ? this.roomImage(loc) : null,
       myScene: this.sceneFor(clientId, loc),
       hereNpcs,
       hereWith,
@@ -814,8 +1149,19 @@ export class TurnEngine {
       myPopups: this.popupsOf.get(clientId) ?? [],
       lastResult: this.lastResultOf.get(clientId) ?? null,
       lastPublicEvent: this.lastPublicEvent,
+      travelTo: Object.entries(this.graph.locations)
+        .filter(([id]) => !this.isLocationLocked(id))
+        .map(([id, loc]) => ({ id, name: loc.name || id })),
       party: clientId === this.hostClientId ? this.partyView() : undefined,
     };
+  }
+
+  private roomImage(loc: string): string | null {
+    const room = this.graph.locations[loc];
+    const shift = this.backgroundShift.get(loc) ?? 0;
+    const list = room?.backgrounds ?? [];
+    if (shift > 0 && list.length > 1) return list[shift % list.length]?.url ?? null;
+    return pickLocationImage(room, this.flags, this.round);
   }
 
   private sceneFor(clientId: string, loc: string | null): SceneHotspot[] {
@@ -832,6 +1178,8 @@ export class TurnEngine {
         this.worldClaimed,
         this.stateIds(clientId),
         open,
+        new Set((this.memoriesOf.get(clientId) ?? []).map((m) => m.id)),
+        this.seesHidden(clientId),
       ).map((t) => t.id),
     );
     const openNpcs = new Set(
@@ -863,8 +1211,10 @@ export class TurnEngine {
           ? availableTalkOptions(npc, this.flags, used).map((o) => ({
               id: o.id,
               label: o.label,
+              veracity: this.oathedNpcs.has(npc.id) ? o.veracity : undefined,
             }))
           : undefined,
+        pathway: npc?.pathwayLabel,
       });
     }
     return hotspots;
@@ -895,6 +1245,12 @@ export class TurnEngine {
       ]),
       lastPublicEvent: this.lastPublicEvent,
       firedTimelineRounds: [...this.firedTimelineRounds],
+      lastAbilityInLoc: [...this.lastAbilityInLoc.entries()],
+      borrowed: [...this.borrowed.entries()],
+      oathedNpcs: [...this.oathedNpcs],
+      sealedExits: [...this.sealedExits.entries()],
+      hiddenSight: [...this.hiddenSight.entries()],
+      backgroundShift: [...this.backgroundShift.entries()],
     };
   }
 
@@ -927,6 +1283,12 @@ export class TurnEngine {
     );
     this.lastPublicEvent = state.lastPublicEvent ?? null;
     this.firedTimelineRounds = new Set(state.firedTimelineRounds ?? []);
+    this.lastAbilityInLoc = new Map(state.lastAbilityInLoc ?? []);
+    this.borrowed = new Map(state.borrowed ?? []);
+    this.oathedNpcs = new Set(state.oathedNpcs ?? []);
+    this.sealedExits = new Map(state.sealedExits ?? []);
+    this.hiddenSight = new Map(state.hiddenSight ?? []);
+    this.backgroundShift = new Map(state.backgroundShift ?? []);
   }
 }
 
@@ -951,4 +1313,10 @@ export type EngineState = {
   abilityCooldown: [string, [string, number][]][];
   lastPublicEvent: string | null;
   firedTimelineRounds: number[];
+  lastAbilityInLoc?: [string, string][];
+  borrowed?: [string, { id: string; until: number }[]][];
+  oathedNpcs?: string[];
+  sealedExits?: [string, number][];
+  hiddenSight?: [string, number][];
+  backgroundShift?: [string, number][];
 };

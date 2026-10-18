@@ -208,6 +208,33 @@ export function CharactersPanel({
                       style={{ ...field, fontSize: 12, lineHeight: 1.45 }}
                     />
                   </label>
+                  <label className="muted" style={{ fontSize: 11 }}>
+                    Внешний вид
+                    <textarea
+                      value={c.appearance ?? ""}
+                      onChange={(e) => update(c.id, { appearance: e.target.value || undefined })}
+                      rows={2}
+                      placeholder="Что видят рядом стоящие…"
+                      style={{ ...field, fontSize: 12, lineHeight: 1.45 }}
+                    />
+                  </label>
+                  <label className="muted" style={{ fontSize: 11 }}>
+                    Стартовая локация
+                    <select
+                      value={c.startLocationId ?? ""}
+                      onChange={(e) => update(c.id, { startLocationId: e.target.value || undefined })}
+                      style={field}
+                    >
+                      <option value="">Общий старт сценария</option>
+                      {doc.nodes
+                        .filter((n) => n.kind === "location")
+                        .map((n) => (
+                          <option key={n.id} value={n.data.locationId || n.id}>
+                            {n.data.title || n.data.locationId || n.id}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
 
                   {/* Pathway / sequence */}
                   {base ? (
@@ -229,15 +256,21 @@ export function CharactersPanel({
                               | 6
                               | 5
                               | 4;
+                            const allowed = base.pathways.find((p) => p.id === pathwayId)?.neighbors ?? [];
+                            const neighborPathwayId = allowed.includes(c.lore?.neighborPathwayId ?? "")
+                              ? c.lore?.neighborPathwayId
+                              : undefined;
                             update(c.id, {
                               lore: {
                                 baseId: base.id,
                                 pathwayId,
                                 sequenceRank: rank,
+                                neighborPathwayId,
                                 enabledAbilityIds: abilityIdsForSequence(
                                   base,
                                   pathwayId,
                                   rank,
+                                  neighborPathwayId,
                                 ),
                               },
                             });
@@ -254,6 +287,7 @@ export function CharactersPanel({
                       </label>
 
                       {c.lore?.pathwayId ? (
+                        <>
                         <label className="muted" style={{ fontSize: 11 }}>
                           Зелье / последовательность
                           <select
@@ -275,6 +309,7 @@ export function CharactersPanel({
                                     base,
                                     pathwayId,
                                     rank,
+                                    c.lore?.neighborPathwayId,
                                   ),
                                 },
                               });
@@ -293,6 +328,38 @@ export function CharactersPanel({
                             })}
                           </select>
                         </label>
+                          <label className="muted" style={{ fontSize: 11 }}>
+                            Соседний путь
+                            <select
+                              value={c.lore.neighborPathwayId ?? ""}
+                              onChange={(e) => {
+                                const neighborPathwayId = e.target.value || undefined;
+                                const rank = c.lore!.sequenceRank;
+                                update(c.id, {
+                                  lore: {
+                                    ...c.lore!,
+                                    neighborPathwayId,
+                                    enabledAbilityIds: abilityIdsForSequence(
+                                      base,
+                                      c.lore!.pathwayId,
+                                      rank,
+                                      neighborPathwayId,
+                                    ),
+                                  },
+                                });
+                              }}
+                              style={field}
+                            >
+                              <option value="">— без соседа —</option>
+                              {(base.pathways.find((p) => p.id === c.lore?.pathwayId)?.neighbors ?? [])
+                                .map((id) => base.pathways.find((p) => p.id === id))
+                                .filter(Boolean)
+                                .map((p) => (
+                                  <option key={p!.id} value={p!.id}>{p!.nameRu}</option>
+                                ))}
+                            </select>
+                          </label>
+                        </>
                       ) : null}
                     </div>
                   ) : (
@@ -342,13 +409,14 @@ export function CharactersPanel({
                             color: "var(--faint)",
                           }}
                         >
-                          {abilitiesForSequence(base!, c.lore!.pathwayId, c.lore!.sequenceRank).map((a) => (
+                          {abilitiesForSequence(base!, c.lore!.pathwayId, c.lore!.sequenceRank, c.lore!.neighborPathwayId).map((a) => (
                             <li key={a.id} style={{ marginBottom: 2 }}>
                               <span style={{ color: "var(--brass)" }}>{a.nameRu}</span>
                               {" · "}
                               <span>из C{a.rank}</span>
                               {" · "}
-                              {a.kind === "passive" ? "пассивная" : "активная"}
+                              {a.kind === "passive" ? "пассивная" : a.kind === "reaction" ? "реакция" : "активная"}
+                              {a.neighbor ? " · соседний" : ""}
                             </li>
                           ))}
                         </ul>

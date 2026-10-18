@@ -186,6 +186,26 @@ const nodes: ScenarioNode[] = [
       pin("so_porter", "Носильщик", "/third-bell/porter.png", 18, 28, 14, 58, "npc_porter", "talk", "npc"),
     ],
   ),
+  {
+    id: "pr_yard",
+    kind: "presence",
+    x: 0,
+    y: 0,
+    ports: ports("npc"),
+    data: {
+      title: "След колокола",
+      body: "В духовном зрении над сундуками дрожит след. Колокол унесли не к платформе — в служебный коридор.",
+      trigger: "enter",
+      once: true,
+      requiresAbilityId: "fool.9.spirit_vision",
+      grantClue: {
+        id: "bell_trace",
+        title: "След колокола",
+        body: "Духовный след ведёт из багажного двора в служебный коридор.",
+        source: "Багажный двор",
+      },
+    },
+  },
   loc(
     "loc_corridor",
     "Служебный коридор",
@@ -329,6 +349,7 @@ const nodes: ScenarioNode[] = [
         title: "Левая перчатка",
         body: "Шерстяная, мокрая только снаружи. Кто-то снял её у фонаря.",
         imageUrl: "/third-bell/lantern.jpg",
+        abilityId: "artifact.trace",
       },
       audience: "world",
       grantClue: {
@@ -405,6 +426,7 @@ const edges: ScenarioEdge[] = [
   edge("loc_yard", "ins_trunk", "events", "in"),
   edge("loc_yard", "ins_lantern", "events", "in"),
   edge("loc_yard", "npc_porter", "events", "in"),
+  edge("loc_yard", "pr_yard", "events", "in"),
 ];
 
 const characters: ScenarioCharacter[] = [
@@ -426,7 +448,7 @@ const characters: ScenarioCharacter[] = [
       baseId: "lotm",
       pathwayId: "fool",
       sequenceRank: 9,
-      enabledAbilityIds: ["fool.9.spirit_vision", "fool.9.divination"],
+      enabledAbilityIds: ["fool.9.spirit_vision", "fool.9.divination", "fool.9.omen"],
     },
   },
 ];

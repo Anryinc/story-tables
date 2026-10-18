@@ -6,14 +6,17 @@ export type ActionIntent =
   | { type: "inspect"; targetId: string }
   | { type: "talk"; npcId: string; optionId: string }
   | { type: "share"; clueId: string }
-  | { type: "ability"; abilityId: string; targetId?: string; targetLabel?: string };
+  | { type: "ability"; abilityId: string; targetId?: string; targetLabel?: string }
+  | { type: "give"; itemId: string; toClientId: string };
 
 export type ActionOption = {
   id: string;
   intent: ActionIntent;
   label: string;
   detail?: string;
-  needsTarget?: "person" | "spark" | "any";
+  needsTarget?: "person" | "spark" | "any" | "location";
+  /** Сколько ходов ещё нельзя применить. 0 или пусто — готова. */
+  cooldownLeft?: number;
 };
 
 export type Seat = {
@@ -54,13 +57,24 @@ export type InventoryItem = {
   title: string;
   body: string;
   imageUrl?: string;
+  /** Пока предмет у игрока, эта способность его. */
+  abilityId?: string;
 };
+
+export type StatusKind = "mark" | "blessing" | "curse" | "restraint";
+export type StatusBlock = "move" | "talk" | "inspect" | "ability";
 
 export type ActorState = {
   id: string;
   title: string;
   body: string;
   imageUrl?: string;
+  /** По умолчанию пометка. Оковы мешают действовать, проклятие и благословение — влияния. */
+  kind?: StatusKind;
+  /** Пока статус на персонаже, эти действия закрыты. */
+  blocks?: StatusBlock[];
+  /** Спадает в начале этого хода. Пусто — пока не снимут. */
+  untilRound?: number;
 };
 
 export type JournalEntry = {
@@ -73,7 +87,7 @@ export type JournalEntry = {
 export type CharacterAbilityLine = {
   name: string;
   description: string;
-  kind?: "active" | "passive";
+  kind?: "active" | "passive" | "reaction";
 };
 
 export type CharacterOption = {
@@ -101,7 +115,8 @@ export type SceneHotspot = {
   kind: "inspect" | "npc";
   inspectId?: string;
   npcId?: string;
-  talkOptions?: { id: string; label: string }[];
+  talkOptions?: { id: string; label: string; veracity?: "truth" | "lie" }[];
+  pathway?: string;
 };
 
 export type PartySeatView = {
@@ -131,7 +146,7 @@ export type TurnSnapshot = {
   myScene: SceneHotspot[];
   hereNpcs: { id: string; name: string; intro?: string; portraitUrl?: string }[];
   hereWith: string[];
-  company: { clientId: string; name: string }[];
+  company: { clientId: string; name: string; portraitUrl?: string; appearance?: string; givenName?: string }[];
   availableActions: ActionOption[];
   myIntent: ActionIntent | null;
   intentsReady: number;
@@ -145,6 +160,8 @@ export type TurnSnapshot = {
   myPopups: PopupNotice[];
   lastResult: string | null;
   lastPublicEvent: string | null;
+  /** Открытые локации для шага сквозь пространство. */
+  travelTo?: { id: string; name: string }[];
   /** Только у хоста: кто в какой комнате. Гостям не отправляется. */
   party?: PartySeatView[];
 };

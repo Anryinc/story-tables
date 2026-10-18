@@ -30,15 +30,19 @@ export function availableInspect(
   worldClaimed?: Set<string>,
   stateIds?: Set<string>,
   openAbilities?: Set<string>,
+  heldMemoryIds?: Set<string>,
+  seesHidden = false,
 ): GraphInspectable[] {
   const loc = graph.locations[locationId];
   if (!loc) return [];
   return loc.inspect.filter((t) => {
-    if (!gateOpen(t, flags)) return false;
-    if (t.requiresAbilityId && !openAbilities?.has(t.requiresAbilityId)) return false;
+    if (!seesHidden && !gateOpen(t, flags)) return false;
+    if (!seesHidden && t.requiresAbilityId && !openAbilities?.has(t.requiresAbilityId)) return false;
     if (t.requiresState && !stateIds?.has(t.requiresState)) return false;
     if (t.audience === "world" && worldClaimed?.has(t.id)) return false;
-    if (t.once !== false && t.audience !== "world" && seen.has(t.id)) return false;
+    const memoryId = t.clue?.id ?? t.id;
+    if (heldMemoryIds?.has(memoryId)) return false;
+    if (t.once !== false && t.audience !== "world" && seen.has(t.id) && !t.clue) return false;
     return true;
   });
 }
@@ -62,6 +66,7 @@ export function availableTalkOptions(
   npc: GraphNpc,
   flags: Record<string, boolean>,
   used: Set<string>,
+  underOath = false,
 ): GraphTalkOption[] {
   return npc.options.filter((o) => {
     if (!gateOpen(o, flags)) return false;

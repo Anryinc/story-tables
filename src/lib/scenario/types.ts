@@ -7,7 +7,9 @@ export type NodeKind =
   | "branch"
   | "timeline"
   | "npc"
-  | "inspect";
+  | "inspect"
+  | "item"
+  | "presence";
 
 export type EventScope = "actor" | "same_location" | "all";
 
@@ -73,6 +75,10 @@ export type ScenarioTalkOption = {
   requiresAnyFlags?: string[];
   hideIfFlag?: string;
   grantClue?: { id: string; title: string; body: string; source: string; imageUrl?: string };
+  /** Реплика исполняет способность неписи: ставит её флаги и открывает связанное. */
+  usesAbilityId?: string;
+  /** Правда или ложь. Под клятвой ложь не предлагается. Пусто — не помечено. */
+  veracity?: "truth" | "lie";
 };
 
 export type ScenarioNodeData = {
@@ -95,8 +101,15 @@ export type ScenarioNodeData = {
   inspectLabel?: string;
   inspectResult?: string;
   imageUrl?: string;
-  grantItem?: { id: string; title: string; body: string; imageUrl?: string };
-  grantState?: { id: string; title: string; body: string; imageUrl?: string };
+  grantItem?: { id: string; title: string; body: string; imageUrl?: string; abilityId?: string };
+  grantState?: {
+    id: string;
+    title: string;
+    body: string;
+    imageUrl?: string;
+    kind?: "mark" | "blessing" | "curse" | "restraint";
+    blocks?: ("move" | "talk" | "inspect" | "ability")[];
+  };
   requiresState?: string;
   once?: boolean;
   /** each — у каждого игрока своё; world — один забирает на всех. */
@@ -114,6 +127,11 @@ export type ScenarioNodeData = {
   requiresFlag?: string;
   requiresAnyFlags?: string[];
   hideIfFlag?: string;
+  /** Путь и зелье неписи. Игрокам не показывается, пока не включён showPathway. */
+  lore?: ScenarioCharacter["lore"];
+  showPathway?: boolean;
+  /** Присутствие: enter — при входе, round — в начале хода, пока игрок здесь. */
+  trigger?: "enter" | "round";
 };
 
 export type ScenarioNode = {
@@ -158,14 +176,20 @@ export type ScenarioCharacter = {
   /** Личное имя. Если пусто, на карточке игрока стоит прочерк. */
   givenName?: string;
   blurb: string;
+  /** Как выглядит. Показывается рядом стоящим по клику на портрет. */
+  appearance?: string;
   portraitUrl?: string;
   portraitAssetId?: string;
   /** Силуэт, если портрета нет. */
   gender?: "male" | "female";
+  /** Где этот персонаж начинает. Пусто — общая стартовая локация. */
+  startLocationId?: string;
   lore?: {
     baseId: string;
     pathwayId: string;
     sequenceRank: 9 | 8 | 7 | 6 | 5 | 4;
+    /** Один соседний путь. Его способности добавляются, свои не пропадают. */
+    neighborPathwayId?: string;
     enabledAbilityIds?: string[];
   };
 };
@@ -245,6 +269,24 @@ export const NODE_META: Record<
     defaultPorts: [
       { id: "in", label: "в локации", dir: "in", kind: "flow" },
       { id: "out", label: "результат", dir: "out", kind: "flow" },
+    ],
+  },
+  item: {
+    label: "Предмет",
+    color: "#c4a574",
+    fill: "#2a2218",
+    defaultPorts: [
+      { id: "in", label: "в локации", dir: "in", kind: "flow" },
+      { id: "out", label: "взят", dir: "out", kind: "flow" },
+    ],
+  },
+  presence: {
+    label: "Присутствие",
+    color: "#7a6a55",
+    fill: "#1c1814",
+    defaultPorts: [
+      { id: "in", label: "в локации", dir: "in", kind: "flow" },
+      { id: "out", label: "след", dir: "out", kind: "flow" },
     ],
   },
 };

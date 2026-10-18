@@ -23,8 +23,15 @@ export type GraphInspectable = FlagGate & {
   setFlags?: string[];
   clue?: Clue;
   image?: string;
-  item?: { id: string; title: string; body: string; imageUrl?: string };
-  grantState?: { id: string; title: string; body: string; imageUrl?: string };
+  item?: { id: string; title: string; body: string; imageUrl?: string; abilityId?: string };
+  grantState?: {
+    id: string;
+    title: string;
+    body: string;
+    imageUrl?: string;
+    kind?: "mark" | "blessing" | "curse" | "restraint";
+    blocks?: ("move" | "talk" | "inspect" | "ability")[];
+  };
   requiresState?: string;
   /** Видно только тому, у кого эта способность пассивна или уже применена. */
   requiresAbilityId?: string;
@@ -37,6 +44,19 @@ export type GraphTalkOption = FlagGate & {
   once?: boolean;
   setFlags?: string[];
   clue?: Clue;
+  usesAbilityId?: string;
+  veracity?: "truth" | "lie";
+};
+
+export type GraphPresence = FlagGate & {
+  id: string;
+  title: string;
+  body: string;
+  trigger: "enter" | "round";
+  once?: boolean;
+  requiresAbilityId?: string;
+  setFlags?: string[];
+  clue?: Clue;
 };
 
 export type GraphNpc = FlagGate & {
@@ -46,6 +66,7 @@ export type GraphNpc = FlagGate & {
   portraitUrl?: string;
   options: GraphTalkOption[];
   requiresAbilityId?: string;
+  pathwayLabel?: string;
 };
 
 export type GraphScenePin = {
@@ -75,6 +96,7 @@ export type GraphLocation = {
   exits: GraphExit[];
   inspect: GraphInspectable[];
   npcs?: GraphNpc[];
+  presences?: GraphPresence[];
   scene?: GraphScenePin[];
 };
 

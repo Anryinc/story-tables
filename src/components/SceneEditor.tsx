@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as RE, type ReactNode } from "react";
 import { getLoreBase } from "@/lib/lore/registry";
+import { abilitiesForSequence } from "@/lib/lore/types";
 import { addAssetFromFile, resolveAssetUrl } from "@/lib/assets/store";
 import {
   createNode,
@@ -11,13 +12,14 @@ import {
   type SceneObject,
 } from "@/lib/scenario/types";
 
-type Tool = "select" | "spark" | "npc";
+type Tool = "select" | "spark" | "item" | "npc";
 type Mode = "edit" | "play";
 type Sel =
   | { kind: "room" }
   | { kind: "spark"; id: string }
   | { kind: "npc"; id: string }
-  | { kind: "exit"; id: string };
+  | { kind: "exit"; id: string }
+  | { kind: "presence"; id: string };
 
 const field: CSSProperties = {
   display: "block",
@@ -83,13 +85,15 @@ function childrenOf(doc: ScenarioDocument, locId: string) {
   }
   const inspects: ScenarioNode[] = [];
   const npcs: ScenarioNode[] = [];
+  const presences: ScenarioNode[] = [];
   for (const id of ids) {
     const n = doc.nodes.find((x) => x.id === id);
     if (!n) continue;
     if (n.kind === "inspect") inspects.push(n);
     if (n.kind === "npc") npcs.push(n);
+    if (n.kind === "presence") presences.push(n);
   }
-  return { inspects, npcs };
+  return { inspects, npcs, presences };
 }
 
 function exitsOf(doc: ScenarioDocument, locId: string) {
@@ -149,7 +153,7 @@ export function SceneEditor({
       )
     : [];
   const stageBg = pickStudioBackground(backgrounds, loc.data.background, previewFlagMap, previewRound);
-  const { inspects, npcs } = childrenOf(doc, loc.id);
+  const { inspects, npcs, presences } = childrenOf(doc, loc.id);
   const exits = exitsOf(doc, loc.id);
   const editing = mode === "edit";
 
@@ -235,6 +239,51 @@ export function SceneEditor({
     setTool("select");
   };
 
+  const addItem = (x: number, y: number) => {
+    const child = createNode("item", 0, 0);
+    child.data.title = "Предмет";
+    child.data.inspectLabel = "Подобрать";
+    child.data.inspectResult = "Вы забираете вещь.";
+    child.data.grantItem = {
+      id: `item_${child.id}`,
+      title: "Предмет",
+      body: "Лежал здесь.",
+    };
+    const pin: SceneObject = {
+      id: `so_${child.id}`,
+      kind: "hotspot",
+      label: "Предмет",
+      x: Math.max(0, x - 4),
+      y: Math.max(0, y - 6),
+      w: 8,
+      h: 12,
+      linkNodeId: child.id,
+      interaction: "inspect",
+      percent: true,
+    };
+    const edge: ScenarioEdge = {
+      id: `e_${loc.id}_${child.id}`,
+      from: loc.id,
+      fromPort: "events",
+      to: child.id,
+      toPort: "in",
+    };
+    commit({
+      ...doc,
+      nodes: [
+        ...doc.nodes.map((n) =>
+          n.id === loc.id
+            ? { ...n, data: { ...n.data, sceneObjects: [...objects, pin] } }
+            : n,
+        ),
+        child,
+      ],
+      edges: [...doc.edges, edge],
+    });
+    setSel({ kind: "spark", id: pin.id });
+    setTool("select");
+  };
+
   const addNpc = (x: number, y: number) => {
     const child = createNode("npc", 0, 0);
     child.data.title = "Новый персонаж";
@@ -276,6 +325,23 @@ export function SceneEditor({
     });
     setSel({ kind: "npc", id: pin.id });
     setTool("select");
+  };
+
+  const addPresence = () => {
+    const child = createNode("presence", 0, 0);
+    child.data.title = "Невидимый след";
+    child.data.body = "Кто-то был здесь.";
+    child.data.trigger = "enter";
+    child.data.once = true;
+    const edge: ScenarioEdge = {
+      id: `e_${loc.id}_${child.id}`,
+      from: loc.id,
+      fromPort: "events",
+      to: child.id,
+      toPort: "in",
+    };
+    commit({ ...doc, nodes: [...doc.nodes, child], edges: [...doc.edges, edge] });
+    setSel({ kind: "presence", id: child.id });
   };
 
   const placeExisting = (node: ScenarioNode) => {
@@ -321,6 +387,7 @@ export function SceneEditor({
     const p = percentAt(e);
     if (!p) return;
     if (tool === "spark") addSpark(p.x, p.y);
+    else if (tool === "item") addItem(p.x, p.y);
     else if (tool === "npc") addNpc(p.x, p.y);
     else setSel({ kind: "room" });
   };
@@ -411,7 +478,11 @@ export function SceneEditor({
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
           <ToolButton active={tool === "select"} onClick={() => setTool("select")}>Выделение</ToolButton>
           <ToolButton active={tool === "spark"} onClick={() => setTool("spark")}>Искра</ToolButton>
+          <ToolButton active={tool === "item"} onClick={() => setTool("item")}>Предмет</ToolButton>
           <ToolButton active={tool === "npc"} onClick={() => setTool("npc")}>NPC</ToolButton>
+          <button type="button" className="btn" style={{ height: 32, fontSize: 12 }} onClick={addPresence}>
+            Присутствие
+          </button>
           <label className="btn" style={{ height: 32, fontSize: 12, cursor: "pointer" }}>
             {uploading ? "…" : "Фон"}
             <input
@@ -459,7 +530,7 @@ export function SceneEditor({
             background: stageBg
               ? `#14110e center / cover no-repeat url(${stageBg})`
               : "#14110e",
-            cursor: tool === "spark" || tool === "npc" ? "crosshair" : "default",
+            cursor: tool === "spark" || tool === "item" || tool === "npc" ? "crosshair" : "default",
           }}
         >
           {stageBg ? (
@@ -866,6 +937,14 @@ export function SceneEditor({
               </Row>
             ))}
         </Group>
+        <Group label="Присутствия">
+          {presences.map((n) => (
+            <Row key={n.id} active={sel.kind === "presence" && sel.id === n.id} onClick={() => setSel({ kind: "presence", id: n.id })}>
+              {n.data.title || "След"} · {n.data.trigger === "round" ? "ход" : "вход"}
+            </Row>
+          ))}
+          {presences.length === 0 ? <p className="faint" style={{ fontSize: 12 }}>Нет. Кнопка «Присутствие».</p> : null}
+        </Group>
         <Group label="Выходы">
           {exits.map((e) => {
             const to = doc.nodes.find((n) => n.id === e.to);
@@ -887,7 +966,7 @@ export function SceneEditor({
               uploadTo={uploadTo}
             />
           ) : null}
-          {selectedNode?.kind === "inspect" && selectedPin ? (
+          {selectedNode && selectedPin && (selectedNode.kind === "inspect" || selectedNode.kind === "item") ? (
             <SparkInspector
               node={selectedNode}
               pin={selectedPin}
@@ -902,6 +981,8 @@ export function SceneEditor({
             <NpcInspector
               node={selectedNode}
               pin={selectedPin}
+              abilities={loreAbilities}
+              base={loreBase}
               onNode={(d) => patchNode(selectedNode.id, d)}
               onPin={(d) => patchObject(selectedPin.id, d)}
               onDelete={removeSelected}
@@ -913,6 +994,22 @@ export function SceneEditor({
               edge={selectedExit}
               rooms={doc.nodes.filter((n) => n.kind === "location" && n.id !== loc.id)}
               onPatch={(d) => patchEdge(selectedExit.id, d)}
+            />
+          ) : null}
+          {sel.kind === "presence" ? (
+            <PresenceInspector
+              node={doc.nodes.find((n) => n.id === sel.id)}
+              abilities={loreAbilities}
+              base={loreBase}
+              onNode={(d) => patchNode(sel.id, d)}
+              onDelete={() => {
+                commit({
+                  ...doc,
+                  nodes: doc.nodes.filter((n) => n.id !== sel.id),
+                  edges: doc.edges.filter((e) => e.from !== sel.id && e.to !== sel.id),
+                });
+                setSel({ kind: "room" });
+              }}
             />
           ) : null}
         </div>
@@ -1221,6 +1318,7 @@ function SparkInspector({
                     title: e.target.value.trim(),
                     body: d.inspectResult || "",
                     imageUrl: d.imageUrl,
+                    abilityId: d.grantItem?.abilityId,
                   }
                 : undefined,
               audience: e.target.value.trim() ? "world" : d.audience,
@@ -1228,22 +1326,79 @@ function SparkInspector({
           }
           style={field}
         />
+        {d.grantItem && abilities.length > 0 ? (
+          <select
+            value={d.grantItem.abilityId ?? ""}
+            onChange={(e) =>
+              onNode({
+                grantItem: { ...d.grantItem!, abilityId: e.target.value || undefined },
+              })
+            }
+            style={field}
+          >
+            <option value="">Предмет без способности</option>
+            {abilities.map((a) => (
+              <option key={a.id} value={a.id}>{a.nameRu}</option>
+            ))}
+          </select>
+        ) : null}
         <input
           value={d.grantState?.title ?? ""}
-          placeholder="Состояние персонажа (пусто = нет)"
+          placeholder="Статус на персонажа (пусто = нет)"
           onChange={(e) =>
             onNode({
               grantState: e.target.value.trim()
                 ? {
                     id: d.grantState?.id || `state_${node.id}`,
                     title: e.target.value.trim(),
-                    body: d.inspectResult || "",
+                    body: d.grantState?.body || d.inspectResult || "",
+                    kind: d.grantState?.kind,
+                    blocks: d.grantState?.blocks,
                   }
                 : undefined,
             })
           }
           style={field}
         />
+        {d.grantState ? (
+          <>
+            <select
+              value={d.grantState.kind ?? "mark"}
+              onChange={(e) =>
+                onNode({
+                  grantState: {
+                    ...d.grantState!,
+                    kind: e.target.value as "mark" | "blessing" | "curse" | "restraint",
+                  },
+                })
+              }
+              style={field}
+            >
+              <option value="mark">Пометка</option>
+              <option value="blessing">Благословение</option>
+              <option value="curse">Проклятие</option>
+              <option value="restraint">Оковы</option>
+            </select>
+            <input
+              value={(d.grantState.blocks ?? []).join(", ")}
+              placeholder="Закрывает: move, talk, inspect, ability"
+              onChange={(e) =>
+                onNode({
+                  grantState: {
+                    ...d.grantState!,
+                    blocks: e.target.value
+                      .split(/[,;]/)
+                      .map((s) => s.trim())
+                      .filter((s): s is "move" | "talk" | "inspect" | "ability" =>
+                        s === "move" || s === "talk" || s === "inspect" || s === "ability",
+                      ),
+                  },
+                })
+              }
+              style={field}
+            />
+          </>
+        ) : null}
       </Section>
       <Section title="Когда видно / что ставит">
         {abilities.length > 0 ? (
@@ -1288,6 +1443,8 @@ function SparkInspector({
 function NpcInspector({
   node,
   pin,
+  abilities,
+  base,
   onNode,
   onPin,
   onDelete,
@@ -1295,6 +1452,8 @@ function NpcInspector({
 }: {
   node: ScenarioNode;
   pin: SceneObject;
+  abilities: { id: string; nameRu: string }[];
+  base: ReturnType<typeof getLoreBase>;
   onNode: (d: Partial<ScenarioNode["data"]>) => void;
   onPin: (d: Partial<SceneObject>) => void;
   onDelete: () => void;
@@ -1345,6 +1504,62 @@ function NpcInspector({
           />
         </label>
       </Section>
+      {base ? (
+        <Section title="Путь и зелье">
+          <select
+            value={d.lore?.pathwayId ?? ""}
+            onChange={(e) => {
+              const pathwayId = e.target.value;
+              if (!pathwayId) {
+                onNode({ lore: undefined });
+                return;
+              }
+              onNode({
+                lore: {
+                  baseId: base.id,
+                  pathwayId,
+                  sequenceRank: 9,
+                  enabledAbilityIds: abilitiesForSequence(base, pathwayId, 9).map((a) => a.id),
+                },
+              });
+            }}
+            style={field}
+          >
+            <option value="">— без пути —</option>
+            {base.pathways.map((p) => (
+              <option key={p.id} value={p.id}>{p.nameRu}</option>
+            ))}
+          </select>
+          {d.lore?.pathwayId ? (
+            <select
+              value={d.lore.sequenceRank}
+              onChange={(e) => {
+                const rank = Number(e.target.value) as 9 | 8 | 7 | 6 | 5 | 4;
+                onNode({
+                  lore: {
+                    ...d.lore!,
+                    sequenceRank: rank,
+                    enabledAbilityIds: abilitiesForSequence(base, d.lore!.pathwayId, rank).map((a) => a.id),
+                  },
+                });
+              }}
+              style={field}
+            >
+              {[9, 8, 7, 6, 5, 4].map((r) => (
+                <option key={r} value={r}>C{r}</option>
+              ))}
+            </select>
+          ) : null}
+          <label className="muted" style={{ fontSize: 12, display: "block", marginTop: 6 }}>
+            <input
+              type="checkbox"
+              checked={Boolean(d.showPathway)}
+              onChange={(e) => onNode({ showPathway: e.target.checked })}
+            />{" "}
+            Показывать путь игрокам
+          </label>
+        </Section>
+      ) : null}
       <Section title="Реплики">
         {lines.map((line) => (
           <div key={line.id} className="card" style={{ marginTop: 8, display: "grid", gap: 6 }}>
@@ -1361,12 +1576,37 @@ function NpcInspector({
               onChange={(e) => patchLine(line.id, { reply: e.target.value })}
               style={{ ...field, resize: "vertical" }}
             />
+            <select
+              value={line.veracity ?? ""}
+              onChange={(e) =>
+                patchLine(line.id, {
+                  veracity: e.target.value === "truth" || e.target.value === "lie" ? e.target.value : undefined,
+                })
+              }
+              style={field}
+            >
+              <option value="">Без метки</option>
+              <option value="truth">Правда</option>
+              <option value="lie">Ложь</option>
+            </select>
             <input
               value={line.requiresFlag ?? ""}
               placeholder="Нужен флаг"
               onChange={(e) => patchLine(line.id, { requiresFlag: e.target.value.trim() || undefined })}
               style={field}
             />
+            {abilities.length > 0 ? (
+              <select
+                value={line.usesAbilityId ?? ""}
+                onChange={(e) => patchLine(line.id, { usesAbilityId: e.target.value || undefined })}
+                style={field}
+              >
+                <option value="">Реплика не применяет способность</option>
+                {abilities.map((a) => (
+                  <option key={a.id} value={a.id}>{a.nameRu}</option>
+                ))}
+              </select>
+            ) : null}
             <button
               type="button"
               className="btn"
@@ -1396,6 +1636,61 @@ function NpcInspector({
       <button type="button" className="btn" style={{ marginTop: 12, color: "var(--danger)" }} onClick={onDelete}>
         Удалить NPC
       </button>
+    </div>
+  );
+}
+
+function PresenceInspector({
+  node,
+  abilities,
+  base,
+  onNode,
+  onDelete,
+}: {
+  node: ScenarioNode | undefined;
+  abilities: { id: string; nameRu: string }[];
+  base: ReturnType<typeof getLoreBase>;
+  onNode: (d: Partial<ScenarioNode["data"]>) => void;
+  onDelete: () => void;
+}) {
+  if (!node) return null;
+  const d = node.data;
+  return (
+    <div>
+      <h3 style={{ color: "var(--paper)", margin: "8px 0" }}>Присутствие</h3>
+      <p className="faint" style={{ fontSize: 12 }}>На сцене не видно. Срабатывает само.</p>
+      <input value={d.title} onChange={(e) => onNode({ title: e.target.value })} style={field} />
+      <textarea
+        value={d.body ?? ""}
+        rows={3}
+        placeholder="Что чувствует игрок"
+        onChange={(e) => onNode({ body: e.target.value })}
+        style={{ ...field, resize: "vertical" }}
+      />
+      <select
+        value={d.trigger === "round" ? "round" : "enter"}
+        onChange={(e) => onNode({ trigger: e.target.value === "round" ? "round" : "enter" })}
+        style={field}
+      >
+        <option value="enter">При входе</option>
+        <option value="round">В начале хода</option>
+      </select>
+      {abilities.length > 0 ? (
+        <select
+          value={d.requiresAbilityId ?? ""}
+          onChange={(e) => onNode({ requiresAbilityId: e.target.value || undefined })}
+          style={field}
+        >
+          <option value="">Видят все</option>
+          {abilities.map((a) => (
+            <option key={a.id} value={a.id}>{a.nameRu}</option>
+          ))}
+        </select>
+      ) : null}
+      <button type="button" className="btn" style={{ marginTop: 12, color: "var(--danger)" }} onClick={onDelete}>
+        Удалить присутствие
+      </button>
+      {base ? null : <p className="faint" style={{ fontSize: 11 }}>Включите LoTM, чтобы выбрать способность.</p>}
     </div>
   );
 }

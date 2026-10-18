@@ -97,9 +97,9 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
     if (!a || !b) continue;
 
     const pair: [ScenarioNode, ScenarioNode][] = [];
-    if (a.kind === "location" && (b.kind === "inspect" || b.kind === "npc"))
+    if (a.kind === "location" && (b.kind === "inspect" || b.kind === "item" || b.kind === "npc" || b.kind === "presence"))
       pair.push([a, b]);
-    if (b.kind === "location" && (a.kind === "inspect" || a.kind === "npc"))
+    if (b.kind === "location" && (a.kind === "inspect" || a.kind === "item" || a.kind === "npc" || a.kind === "presence"))
       pair.push([b, a]);
 
     for (const [locNode, child] of pair) {
@@ -107,17 +107,24 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
       const loc = locations[lid];
       if (!loc) continue;
 
-      if (child.kind === "inspect") {
+      if (child.kind === "inspect" || child.kind === "item") {
         const item: GraphInspectable = {
           id: child.id,
-          label: child.data.inspectLabel || child.data.title || "Осмотр",
+          label: child.data.inspectLabel || child.data.title || (child.kind === "item" ? "Предмет" : "Осмотр"),
           result: child.data.inspectResult || child.data.body || "…",
-          once: child.data.once !== false,
-          audience: child.data.audience === "world" ? "world" : "each",
+          once: child.kind === "item" ? true : child.data.once !== false,
+          audience: child.kind === "item" ? "world" : child.data.audience === "world" ? "world" : "each",
           setFlags: child.data.setFlags,
           clue: child.data.grantClue,
           image: child.data.imageUrl,
-          item: child.data.grantItem,
+          item: child.kind === "item"
+            ? (child.data.grantItem ?? {
+                id: child.id,
+                title: child.data.title || "Предмет",
+                body: child.data.inspectResult || child.data.body || "",
+                imageUrl: child.data.imageUrl,
+              })
+            : child.data.grantItem,
           grantState: child.data.grantState,
           requiresState: child.data.requiresState,
           requiresAbilityId: child.data.requiresAbilityId,
@@ -139,6 +146,9 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
           requiresFlag: child.data.requiresFlag,
           requiresAnyFlags: child.data.requiresAnyFlags,
           hideIfFlag: child.data.hideIfFlag,
+          pathwayLabel: child.data.showPathway && child.data.lore
+            ? `C${child.data.lore.sequenceRank}`
+            : undefined,
           options:
             authored.length > 0
               ? authored.map((o) => ({
@@ -148,6 +158,8 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
                   once: o.once !== false,
                   setFlags: o.setFlags,
                   clue: o.grantClue,
+                  usesAbilityId: o.usesAbilityId,
+                  veracity: o.veracity,
                   requiresFlag: o.requiresFlag,
                   requiresAnyFlags: o.requiresAnyFlags,
                   hideIfFlag: o.hideIfFlag,
@@ -164,6 +176,25 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
                 ],
         };
         if (!loc.npcs!.some((x) => x.id === npc.id)) loc.npcs!.push(npc);
+      }
+
+      if (child.kind === "presence") {
+        loc.presences = loc.presences ?? [];
+        if (!loc.presences.some((x) => x.id === child.id)) {
+          loc.presences.push({
+            id: child.id,
+            title: child.data.title || "Присутствие",
+            body: child.data.body || child.data.description || "…",
+            trigger: child.data.trigger === "round" ? "round" : "enter",
+            once: child.data.once !== false,
+            requiresAbilityId: child.data.requiresAbilityId,
+            setFlags: child.data.setFlags,
+            clue: child.data.grantClue,
+            requiresFlag: child.data.requiresFlag,
+            requiresAnyFlags: child.data.requiresAnyFlags,
+            hideIfFlag: child.data.hideIfFlag,
+          });
+        }
       }
     }
   }
