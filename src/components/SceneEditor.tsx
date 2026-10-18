@@ -118,7 +118,15 @@ export function SceneEditor({
   const [previewPopup, setPreviewPopup] = useState<PreviewPopup | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: string; ox: number; oy: number } | null>(null);
-  const resize = useRef<{ id: string; ox: number; oy: number; w: number; h: number } | null>(null);
+  const resize = useRef<{
+    id: string;
+    corner: "nw" | "ne" | "sw" | "se";
+    ax: number;
+    ay: number;
+    startW: number;
+    startH: number;
+    aspect: number;
+  } | null>(null);
 
   useEffect(() => {
     setSel({ kind: "room" });
@@ -321,9 +329,18 @@ export function SceneEditor({
     if (!p) return;
     if (resize.current) {
       const r = resize.current;
+      const rawW = Math.max(4, Math.abs(p.x - r.ax));
+      const rawH = Math.max(4, Math.abs(p.y - r.ay));
+      const scale = Math.max(rawW / r.startW, rawH / r.startH, 0.25);
+      const w = Math.min(90, Math.max(6, r.startW * scale));
+      const h = Math.min(90, Math.max(6, w / r.aspect));
+      const x = r.corner.includes("e") ? r.ax : r.ax - w;
+      const y = r.corner.includes("s") ? r.ay : r.ay - h;
       patchObject(r.id, {
-        w: Math.max(6, r.w + (p.x - r.ox)),
-        h: Math.max(10, r.h + (p.y - r.oy)),
+        x: Math.max(0, Math.min(100 - w, x)),
+        y: Math.max(0, Math.min(100 - h, y)),
+        w,
+        h,
       });
       return;
     }
@@ -534,24 +551,40 @@ export function SceneEditor({
                     </span>
                   ) : null}
                   {editing && active ? (
-                    <span
-                      onPointerDown={(e) => {
-                        e.stopPropagation();
-                        const p = percentAt(e);
-                        if (!p) return;
-                        resize.current = { id: o.id, ox: p.x, oy: p.y, w: o.w, h: o.h };
-                      }}
-                      style={{
-                        position: "absolute",
-                        right: -4,
-                        bottom: -4,
-                        width: 12,
-                        height: 12,
-                        borderRadius: 2,
-                        background: "var(--brass)",
-                        cursor: "nwse-resize",
-                      }}
-                    />
+                    <>
+                      {(["nw", "ne", "sw", "se"] as const).map((corner) => (
+                        <span
+                          key={corner}
+                          onPointerDown={(e) => {
+                            e.stopPropagation();
+                            const p = percentAt(e);
+                            if (!p) return;
+                            const ax = corner.includes("w") ? o.x + o.w : o.x;
+                            const ay = corner.includes("n") ? o.y + o.h : o.y;
+                            resize.current = {
+                              id: o.id,
+                              corner,
+                              ax,
+                              ay,
+                              startW: Math.max(o.w, 1),
+                              startH: Math.max(o.h, 1),
+                              aspect: Math.max(o.w, 1) / Math.max(o.h, 1),
+                            };
+                            (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+                          }}
+                          style={{
+                            position: "absolute",
+                            width: 12,
+                            height: 12,
+                            borderRadius: 2,
+                            background: "var(--brass)",
+                            cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize",
+                            ...(corner.includes("n") ? { top: -4 } : { bottom: -4 }),
+                            ...(corner.includes("w") ? { left: -4 } : { right: -4 }),
+                          }}
+                        />
+                      ))}
+                    </>
                   ) : null}
                 </button>
               );

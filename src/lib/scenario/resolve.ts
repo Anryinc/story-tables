@@ -44,9 +44,16 @@ function withBundledArt(stored: ScenarioDocument, bundled: ScenarioDocument): Sc
       },
     };
   });
+  const known = new Set(nodes.map((n) => n.id));
+  const extra = bundled.nodes.filter((n) => !known.has(n.id));
+  const edgeIds = new Set(stored.edges.map((e) => e.id));
+  const extraEdges = bundled.edges.filter(
+    (e) => !edgeIds.has(e.id) && (extra.some((n) => n.id === e.from || n.id === e.to) || (known.has(e.from) && known.has(e.to) && !stored.edges.some((s) => s.from === e.from && s.to === e.to && s.fromPort === e.fromPort))),
+  );
   return {
     ...stored,
-    nodes,
+    nodes: [...nodes, ...extra],
+    edges: [...stored.edges, ...extraEdges],
     manifest: {
       ...stored.manifest,
       coverImage: dead(stored.manifest.coverImage)

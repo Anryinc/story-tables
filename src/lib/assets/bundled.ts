@@ -22,4 +22,8 @@ export const BUNDLED_ASSETS: BundledAsset[] = [
   { id: "bundled_tb_ledger", name: "item_журнал", url: "/third-bell/ledger.jpg", category: "item" },
   { id: "bundled_tb_drawer", name: "item_ящик", url: "/third-bell/drawer.jpg", category: "item" },
   { id: "bundled_tb_glass", name: "item_стекло", url: "/third-bell/glass.jpg", category: "item" },
+  { id: "bundled_tb_yard", name: "bg_багажный_двор", url: "/third-bell/yard.jpg", category: "background" },
+  { id: "bundled_tb_porter", name: "npc_носильщик", url: "/third-bell/porter.png", category: "npc" },
+  { id: "bundled_tb_trunk", name: "item_сундук", url: "/third-bell/trunk.jpg", category: "item" },
+  { id: "bundled_tb_lantern", name: "item_фонарь", url: "/third-bell/lantern.jpg", category: "item" },
 ];

@@ -173,6 +173,20 @@ const nodes: ScenarioNode[] = [
     ],
   ),
   loc(
+    "loc_yard",
+    "Багажный двор",
+    280,
+    420,
+    "yard",
+    "Навес, мокрые сундуки и фонарь, который кто-то не погасил.",
+    "/third-bell/yard.jpg",
+    [
+      pin("so_trunk", "Сундук", "/third-bell/trunk.jpg", 62, 48, 22, 28, "ins_trunk", "inspect"),
+      pin("so_lantern", "Фонарь", "/third-bell/lantern.jpg", 48, 18, 10, 18, "ins_lantern", "inspect"),
+      pin("so_porter", "Носильщик", "/third-bell/porter.png", 18, 28, 14, 58, "npc_porter", "talk", "npc"),
+    ],
+  ),
+  loc(
     "loc_corridor",
     "Служебный коридор",
     860,
@@ -287,12 +301,90 @@ const nodes: ScenarioNode[] = [
       source: "Комната дежурного",
     },
   }),
+  inspect(
+    "ins_trunk",
+    "Сундук",
+    "Мокрый сундук",
+    "Замок сорван. Внутри — пустой футляр от станционного колокола и клок шерсти.",
+    {
+      imageUrl: "/third-bell/trunk.jpg",
+      setFlags: ["saw_trunk"],
+      grantClue: {
+        id: "empty_case",
+        title: "Футляр от колокола",
+        body: "Колокол унесли из багажного двора. Футляр ещё мокрый.",
+        source: "Багажный двор",
+      },
+    },
+  ),
+  inspect(
+    "ins_lantern",
+    "Фонарь",
+    "Непогашенный фонарь",
+    "Стекло тёплое. На ручке — чужая перчатка, левая.",
+    {
+      imageUrl: "/third-bell/lantern.jpg",
+      grantItem: {
+        id: "left_glove",
+        title: "Левая перчатка",
+        body: "Шерстяная, мокрая только снаружи. Кто-то снял её у фонаря.",
+        imageUrl: "/third-bell/lantern.jpg",
+      },
+      audience: "world",
+      grantClue: {
+        id: "warm_lantern",
+        title: "Тёплый фонарь",
+        body: "Во дворе фонарь не гасили. Рядом лежала чужая перчатка.",
+        source: "Багажный двор",
+      },
+    },
+  ),
+  {
+    id: "npc_porter",
+    kind: "npc",
+    x: 0,
+    y: 0,
+    ports: ports("npc"),
+    data: {
+      title: "Носильщик Егор",
+      npcName: "Носильщик Егор",
+      npcIntro: "Стоит под навесом и не выпускает из рук пустую бирку.",
+      portraitUrl: "/third-bell/porter.png",
+      talkOptions: [
+        {
+          id: "ask_bell",
+          label: "Где колокол?",
+          reply: "«Унесли после второго звонка. Я сундук не открывал. Дежурный сказал ждать третьего и никого не пускать на пути.»",
+          once: true,
+          setFlags: ["spoke_porter"],
+          grantClue: {
+            id: "porter_bell",
+            title: "Колокол унесли",
+            body: "Егор видел, как после второго звонка унесли станционный колокол.",
+            source: "Егор",
+          },
+        },
+        {
+          id: "ask_glove",
+          label: "Чья перчатка?",
+          reply: "«Не моя. Левая. Хозяин ушёл к платформе и не вернулся за второй.»",
+          once: true,
+          requiresFlag: "saw_trunk",
+          setFlags: ["glove_owner"],
+        },
+      ],
+    },
+  },
 ];
 
 const edges: ScenarioEdge[] = [
   edge("start", "loc_platform", "out", "in", "начало"),
   edge("loc_platform", "loc_hall", "out", "in", "В зал"),
   edge("loc_hall", "loc_platform", "out", "in", "На платформу"),
+  edge("loc_platform", "loc_office", "out", "in", "В кассу"),
+  edge("loc_office", "loc_platform", "out", "in", "На платформу"),
+  edge("loc_platform", "loc_yard", "out", "in", "В багажный двор"),
+  edge("loc_yard", "loc_platform", "out", "in", "На платформу"),
   edge("loc_hall", "loc_office", "out", "in", "В кассу"),
   edge("loc_office", "loc_hall", "out", "in", "В зал"),
   edge("loc_hall", "loc_corridor", "out", "in", "В служебный коридор", {
@@ -310,6 +402,9 @@ const edges: ScenarioEdge[] = [
   edge("loc_office", "ins_drawer", "events", "in"),
   edge("loc_corridor", "ins_coat", "events", "in"),
   edge("loc_duty", "ins_lamp", "events", "in"),
+  edge("loc_yard", "ins_trunk", "events", "in"),
+  edge("loc_yard", "ins_lantern", "events", "in"),
+  edge("loc_yard", "npc_porter", "events", "in"),
 ];
 
 const characters: ScenarioCharacter[] = [
@@ -343,7 +438,7 @@ export const thirdBellScenario: ScenarioDocument = {
     title: "Третий звонок",
     subtitle: "Ночь на станции «Ламповый тупик»",
     blurb:
-      "Поезд не пришёл. Дежурный не отвечает. Текстовый сценарий, чтобы проверить стол: улики, флаги, закрытую дверь и одну способность.",
+      "Поезд не пришёл. С платформы можно уйти в зал, в кассу или в багажный двор — трое могут разделиться.",
     coverImage: "/third-bell/cover.jpg",
     playersMin: 1,
     playersMax: 3,
