@@ -82,6 +82,14 @@ export function HubPage() {
           >
             Сбросить Червуд
           </button>
+          <button
+            type="button"
+            className="btn"
+            title="Перезаписать localStorage каноном из кода"
+            onClick={() => openBundledStudio("third-bell", true, false)}
+          >
+            Обновить Третий звонок
+          </button>
           <label className="btn" style={{ cursor: "pointer" }}>
             Import JSON
             <input

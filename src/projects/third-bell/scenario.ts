@@ -7,6 +7,7 @@ import type {
   ScenarioNode,
   ScenarioPort,
   ScenarioTalkOption,
+  SceneObject,
 } from "@/lib/scenario/types";
 import { NODE_META } from "@/lib/scenario/types";
 
@@ -21,6 +22,8 @@ function loc(
   y: number,
   locationId: string,
   description: string,
+  background?: string,
+  sceneObjects?: SceneObject[],
 ): ScenarioNode {
   return {
     id,
@@ -28,7 +31,34 @@ function loc(
     x,
     y,
     ports: ports("location"),
-    data: { title, locationId, description },
+    data: { title, locationId, description, background, sceneObjects },
+  };
+}
+
+function pin(
+  id: string,
+  label: string,
+  url: string,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  linkNodeId: string,
+  interaction: "inspect" | "talk",
+  kind: SceneObject["kind"] = "hotspot",
+): SceneObject {
+  return {
+    id,
+    kind,
+    label,
+    url,
+    x,
+    y,
+    w,
+    h,
+    linkNodeId,
+    interaction,
+    percent: true,
   };
 }
 
@@ -102,9 +132,46 @@ const nodes: ScenarioNode[] = [
     ports: ports("start"),
     data: { title: "Старт" },
   },
-  loc("loc_platform", "Платформа", 280, 180, "platform", "Дождь. Фонарь горит, рельсы пустые."),
-  loc("loc_hall", "Зал ожидания", 560, 180, "hall", "Скамейки, остывший самовар, стекло в разводах."),
-  loc("loc_office", "Касса", 560, 420, "office", "Решётка опущена наполовину. Журнал открыт на сегодня."),
+  loc(
+    "loc_platform",
+    "Платформа",
+    280,
+    180,
+    "platform",
+    "Дождь. Фонарь горит, рельсы пустые.",
+    "/third-bell/platform.jpg",
+    [
+      pin("so_puddle", "Лужи", "/third-bell/puddle.jpg", 8, 68, 36, 28, "ins_puddle", "inspect"),
+      pin("so_board", "Табло", "/third-bell/board.jpg", 66, 26, 26, 34, "ins_board", "inspect"),
+      pin("so_clock", "Часы", "/third-bell/clock.jpg", 72, 1, 14, 20, "ins_clock", "inspect"),
+    ],
+  ),
+  loc(
+    "loc_hall",
+    "Зал ожидания",
+    560,
+    180,
+    "hall",
+    "Скамейки, остывший самовар, стекло в разводах.",
+    "/third-bell/hall.jpg",
+    [
+      pin("so_ida", "Ида", "/third-bell/ida.jpg", 15, 32, 16, 52, "npc_ida", "talk", "npc"),
+      pin("so_glass", "Стекло", "/third-bell/glass.jpg", 44, 0, 26, 56, "ins_glass", "inspect"),
+    ],
+  ),
+  loc(
+    "loc_office",
+    "Касса",
+    560,
+    420,
+    "office",
+    "Решётка опущена наполовину. Журнал открыт на сегодня.",
+    "/third-bell/office.jpg",
+    [
+      pin("so_log", "Журнал", "/third-bell/ledger.jpg", 33, 57, 34, 20, "ins_log", "inspect"),
+      pin("so_drawer", "Ящик", "/third-bell/drawer.jpg", 66, 76, 24, 20, "ins_drawer", "inspect"),
+    ],
+  ),
   loc(
     "loc_corridor",
     "Служебный коридор",
@@ -123,9 +190,11 @@ const nodes: ScenarioNode[] = [
   ),
   inspect("ins_puddle", "Лужи", "Лужи у кромки платформы", "В воде дрожит фонарь. Следов нет — дождь их уже съел.", {
     requiresFlag: "rain",
+    imageUrl: "/third-bell/puddle.jpg",
   }),
   inspect("ins_board", "Табло", "Табло отправлений", "Мел стёрт. Осталась одна строка: «до третьего звонка».", {
     setFlags: ["saw_board"],
+    imageUrl: "/third-bell/board.jpg",
     grantClue: {
       id: "board_erased",
       title: "Поезд снят с табло",
@@ -138,7 +207,7 @@ const nodes: ScenarioNode[] = [
     "Часы",
     "Станционные часы",
     "Минутная стрелка стоит так, будто уже был удар, которого никто не слышал.",
-    { requiresFlag: "saw_board" },
+    { requiresFlag: "saw_board", imageUrl: "/third-bell/clock.jpg" },
   ),
   {
     id: "npc_ida",
@@ -150,10 +219,12 @@ const nodes: ScenarioNode[] = [
       title: "Кассир Ида",
       npcName: "Кассир Ида",
       npcIntro: "Стоит у двери в кассу и не смотрит на рельсы.",
+      portraitUrl: "/third-bell/ida.jpg",
       talkOptions: [askTrain, askDuty],
     },
   },
   inspect("ins_log", "Журнал", "Журнал кассы", "Сегодняшняя страница пустая. Вчерашняя оборвана.", {
+    imageUrl: "/third-bell/ledger.jpg",
     grantClue: {
       id: "blank_log",
       title: "Пустая строка",
@@ -162,6 +233,7 @@ const nodes: ScenarioNode[] = [
     },
   }),
   inspect("ins_drawer", "Ящик", "Ящик кассы", "Под копиркой — холодный ключ с биркой «коридор».", {
+    imageUrl: "/third-bell/drawer.jpg",
     requiresFlag: "mentioned_key",
     setFlags: ["staff_key"],
     grantClue: {
@@ -178,6 +250,7 @@ const nodes: ScenarioNode[] = [
     "После духовного зрения разводы складываются в ладонь, прижатую с той стороны.",
     {
       requiresFlag: "spirit_vision",
+      imageUrl: "/third-bell/glass.jpg",
       grantClue: {
         id: "glass_hand",
         title: "Ладонь на стекле",
@@ -259,6 +332,7 @@ export const thirdBellScenario: ScenarioDocument = {
     subtitle: "Ночь на станции «Ламповый тупик»",
     blurb:
       "Поезд не пришёл. Дежурный не отвечает. Текстовый сценарий, чтобы проверить стол: улики, флаги, закрытую дверь и одну способность.",
+    coverImage: "/third-bell/cover.jpg",
     playersMin: 1,
     playersMax: 3,
     status: "playable",

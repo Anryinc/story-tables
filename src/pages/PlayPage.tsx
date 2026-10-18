@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import type { DataConnection } from "peerjs";
 import { PopupModal } from "@/components/PopupModal";
 import { CharacterPickCard } from "@/components/CharacterPickCard";
+import { LocationScene } from "@/components/LocationScene";
 import { getClientId } from "@/lib/ids";
 import { openGuestPeer, type GuestMsg } from "@/lib/p2p";
 import type { ActionIntent, TurnSnapshot } from "@/lib/turn-types";
@@ -194,6 +195,18 @@ export function PlayPage() {
           <h1 className="font-display" style={{ margin: "4px 0", color: "var(--paper)", fontSize: 28 }}>
             {room.myLocationName}
           </h1>
+          <LocationScene
+            image={room.myLocationImage}
+            hotspots={room.myScene}
+            disabled={Boolean(room.myIntent)}
+            onInspect={(inspectId) =>
+              send({
+                t: "intent",
+                clientId,
+                intent: { type: "inspect", targetId: inspectId },
+              })
+            }
+          />
           {room.myLocationDescription ? (
             <p className="muted" style={{ fontSize: 14, lineHeight: 1.45 }}>
               {room.myLocationDescription}

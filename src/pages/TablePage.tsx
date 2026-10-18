@@ -3,6 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import Peer, { type DataConnection } from "peerjs";
 import { PopupModal } from "@/components/PopupModal";
 import { CharacterPickCard } from "@/components/CharacterPickCard";
+import { LocationScene } from "@/components/LocationScene";
 import { getClientId } from "@/lib/ids";
 import {
   makeHostPeerId,
@@ -378,6 +379,18 @@ export function TablePage() {
                 {room.myLocationDescription ? (
                   <p className="muted">{room.myLocationDescription}</p>
                 ) : null}
+                <LocationScene
+                  image={room.myLocationImage}
+                  hotspots={room.myScene}
+                  disabled={Boolean(room.myIntent)}
+                  onInspect={(inspectId) => {
+                    engineRef.current?.submitIntent(clientId, {
+                      type: "inspect",
+                      targetId: inspectId,
+                    });
+                    pushAll();
+                  }}
+                />
                 {room.lastResult ? (
                   <p className="muted">{room.lastResult}</p>
                 ) : null}

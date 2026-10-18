@@ -31,6 +31,8 @@ export type SceneObject = {
   url?: string;
   linkNodeId?: string;
   interaction?: "none" | "inspect" | "talk";
+  /** x/y/w/h are percentages of the scene, not pixels. */
+  percent?: boolean;
 };
 
 export type TimelineMarker = {
@@ -79,6 +81,7 @@ export type ScenarioNodeData = {
   flag?: string;
   inspectLabel?: string;
   inspectResult?: string;
+  imageUrl?: string;
   once?: boolean;
   npcName?: string;
   npcIntro?: string;

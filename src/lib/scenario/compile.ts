@@ -51,6 +51,19 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
       exits: [],
       inspect: [],
       npcs: [],
+      scene: (n.data.sceneObjects ?? [])
+        .filter((o) => o.percent)
+        .map((o) => ({
+          id: o.id,
+          label: o.label,
+          url: o.url,
+          x: o.x,
+          y: o.y,
+          w: o.w,
+          h: o.h,
+          linkNodeId: o.linkNodeId,
+          interaction: o.interaction,
+        })),
     };
   }
 
@@ -97,6 +110,7 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
           once: child.data.once !== false,
           setFlags: child.data.setFlags,
           clue: child.data.grantClue,
+          image: child.data.imageUrl,
           requiresFlag: child.data.requiresFlag,
           requiresAnyFlags: child.data.requiresAnyFlags,
           hideIfFlag: child.data.hideIfFlag,
@@ -110,6 +124,7 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
           id: child.id,
           name: child.data.npcName || child.data.title || "NPC",
           intro: child.data.npcIntro || child.data.description,
+          portraitUrl: child.data.portraitUrl,
           requiresFlag: child.data.requiresFlag,
           requiresAnyFlags: child.data.requiresAnyFlags,
           hideIfFlag: child.data.hideIfFlag,

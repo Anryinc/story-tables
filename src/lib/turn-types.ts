@@ -64,6 +64,19 @@ export type CharacterOption = {
   gender?: "male" | "female";
 };
 
+export type SceneHotspot = {
+  id: string;
+  label: string;
+  image?: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  kind: "inspect" | "npc";
+  inspectId?: string;
+  npcId?: string;
+};
+
 export type PartySeatView = {
   clientId: string;
   name: string;
@@ -88,7 +101,8 @@ export type TurnSnapshot = {
   myLocationName: string | null;
   myLocationDescription: string | null;
   myLocationImage: string | null;
-  hereNpcs: { id: string; name: string; intro?: string }[];
+  myScene: SceneHotspot[];
+  hereNpcs: { id: string; name: string; intro?: string; portraitUrl?: string }[];
   hereWith: string[];
   availableActions: ActionOption[];
   myIntent: ActionIntent | null;

@@ -20,6 +20,7 @@ export type GraphInspectable = FlagGate & {
   once?: boolean;
   setFlags?: string[];
   clue?: Clue;
+  image?: string;
 };
 
 export type GraphTalkOption = FlagGate & {
@@ -35,7 +36,20 @@ export type GraphNpc = FlagGate & {
   id: string;
   name: string;
   intro?: string;
+  portraitUrl?: string;
   options: GraphTalkOption[];
+};
+
+export type GraphScenePin = {
+  id: string;
+  label?: string;
+  url?: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  linkNodeId?: string;
+  interaction?: "none" | "inspect" | "talk";
 };
 
 export type GraphLocation = {
@@ -46,6 +60,7 @@ export type GraphLocation = {
   exits: GraphExit[];
   inspect: GraphInspectable[];
   npcs?: GraphNpc[];
+  scene?: GraphScenePin[];
 };
 
 export type GraphDocument = {

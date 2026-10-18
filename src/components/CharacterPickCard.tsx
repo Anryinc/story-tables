@@ -1,61 +1,14 @@
 import { useState, type CSSProperties } from "react";
 import type { CharacterOption } from "@/lib/turn-types";
 
+const DEFAULT_PORTRAIT = {
+  male: "/portraits/male.jpg",
+  female: "/portraits/female.jpg",
+} as const;
+
 function dash(value?: string | null) {
   const text = value?.trim();
   return text ? text : "—";
-}
-
-function Silhouette({ gender }: { gender?: "male" | "female" }) {
-  const female = gender === "female";
-  return (
-    <svg viewBox="0 0 200 260" width="100%" height="100%" aria-hidden>
-      <rect width="200" height="260" fill="#14110e" />
-      <rect x="0" y="188" width="200" height="72" fill="#1c1814" />
-      <path
-        d={
-          female
-            ? "M38 260c8-52 22-78 62-86 40 8 54 34 62 86H38z"
-            : "M28 260c6-46 20-70 72-78 52 8 66 32 72 78H28z"
-        }
-        fill="#2a241c"
-      />
-      <path
-        d={
-          female
-            ? "M78 176c-6 16-4 36 22 40 26-4 28-24 22-40-8 6-36 6-44 0z"
-            : "M74 178c-4 14-2 30 26 34 28-4 30-20 26-34-10 6-42 6-52 0z"
-        }
-        fill="#3a3228"
-      />
-      <circle cx="100" cy="108" r={female ? 34 : 32} fill="#c4b5a0" />
-      {female ? (
-        <path
-          d="M62 108c2-46 18-62 38-62s36 16 38 62c-6 8-14 28-38 34-24-6-32-26-38-34z"
-          fill="#1a1612"
-        />
-      ) : (
-        <path
-          d="M68 104c4-36 16-50 32-50s28 14 32 50c-2 6-10 14-32 16-22-2-30-10-32-16z"
-          fill="#1a1612"
-        />
-      )}
-      <path
-        d={female ? "M70 118c8 18 52 18 60 0" : "M76 116c6 14 42 14 48 0"}
-        fill="none"
-        stroke="#8d7d68"
-        strokeWidth="1.5"
-      />
-      <circle cx="88" cy="108" r="2" fill="#2a241c" />
-      <circle cx="112" cy="108" r="2" fill="#2a241c" />
-      <path
-        d="M24 18h152"
-        fill="none"
-        stroke="#c4a574"
-        strokeOpacity="0.35"
-      />
-    </svg>
-  );
 }
 
 export function CharacterPortrait({
@@ -66,17 +19,18 @@ export function CharacterPortrait({
   gender?: "male" | "female";
 }) {
   const [broken, setBroken] = useState(false);
-  if (url && !broken) {
-    return (
-      <img
-        src={url}
-        alt=""
-        onError={() => setBroken(true)}
-        style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-      />
-    );
-  }
-  return <Silhouette gender={gender} />;
+  const fallback = DEFAULT_PORTRAIT[gender === "female" ? "female" : "male"];
+  const src = url && !broken ? url : fallback;
+  return (
+    <img
+      src={src}
+      alt=""
+      onError={() => {
+        if (src !== fallback) setBroken(true);
+      }}
+      style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top", display: "block" }}
+    />
+  );
 }
 
 function Line({ label, children }: { label: string; children: string }) {

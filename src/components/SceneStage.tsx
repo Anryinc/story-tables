@@ -11,7 +11,7 @@ export function SceneStage({
   const objects = location.data.sceneObjects ?? [];
   const bg = location.data.background;
   const [selected, setSelected] = useState<string | null>(null);
-  const drag = useRef<{ id: string; ox: number; oy: number } | null>(null);
+  const drag = useRef<{ id: string; ox: number; oy: number; percent: boolean } | null>(null);
   const stageRef = useRef<HTMLDivElement>(null);
 
   const update = (next: SceneObject[]) => {
@@ -23,10 +23,13 @@ export function SceneStage({
     setSelected(o.id);
     const rect = stageRef.current?.getBoundingClientRect();
     if (!rect) return;
+    const originX = o.percent ? (o.x / 100) * rect.width : o.x;
+    const originY = o.percent ? (o.y / 100) * rect.height : o.y;
     drag.current = {
       id: o.id,
-      ox: e.clientX - rect.left - o.x,
-      oy: e.clientY - rect.top - o.y,
+      ox: e.clientX - rect.left - originX,
+      oy: e.clientY - rect.top - originY,
+      percent: Boolean(o.percent),
     };
     (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
   };
@@ -34,8 +37,10 @@ export function SceneStage({
   const onMove = (e: RE) => {
     if (!drag.current || !stageRef.current) return;
     const rect = stageRef.current.getBoundingClientRect();
-    const x = Math.max(0, e.clientX - rect.left - drag.current.ox);
-    const y = Math.max(0, e.clientY - rect.top - drag.current.oy);
+    const px = Math.max(0, e.clientX - rect.left - drag.current.ox);
+    const py = Math.max(0, e.clientY - rect.top - drag.current.oy);
+    const x = drag.current.percent ? (px / rect.width) * 100 : px;
+    const y = drag.current.percent ? (py / rect.height) * 100 : py;
     update(
       objects.map((o) =>
         o.id === drag.current!.id ? { ...o, x, y } : o,
@@ -136,10 +141,10 @@ export function SceneStage({
             onPointerDown={(e) => onDown(e, o)}
             style={{
               position: "absolute",
-              left: o.x,
-              top: o.y,
-              width: o.w,
-              height: o.h,
+              left: o.percent ? `${o.x}%` : o.x,
+              top: o.percent ? `${o.y}%` : o.y,
+              width: o.percent ? `${o.w}%` : o.w,
+              height: o.percent ? `${o.h}%` : o.h,
               border:
                 o.id === selected
                   ? "2px solid var(--brass)"

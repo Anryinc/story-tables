@@ -20,6 +20,7 @@ import type {
   JournalEntry,
   PartySeatView,
   PopupNotice,
+  SceneHotspot,
   Seat,
   SharePayload,
   TurnSnapshot,
@@ -588,6 +589,7 @@ export class TurnEngine {
           id: n.id,
           name: n.name,
           intro: n.intro,
+          portraitUrl: n.portraitUrl,
         }))
       : [];
     return {
@@ -610,6 +612,7 @@ export class TurnEngine {
         ? (this.graph.locations[loc]?.description ?? null)
         : null,
       myLocationImage: loc ? this.graph.locations[loc]?.image ?? null : null,
+      myScene: this.sceneFor(clientId, loc),
       hereNpcs,
       hereWith,
       availableActions: this.actionsFor(clientId),
@@ -626,6 +629,39 @@ export class TurnEngine {
       lastPublicEvent: this.lastPublicEvent,
       party: clientId === this.hostClientId ? this.partyView() : undefined,
     };
+  }
+
+  private sceneFor(clientId: string, loc: string | null): SceneHotspot[] {
+    if (!loc || this.phase !== "planning") return [];
+    const pins = this.graph.locations[loc]?.scene ?? [];
+    const seen = this.inspected.get(clientId) ?? new Set<string>();
+    const openInspect = new Set(
+      availableInspect(this.graph, loc, this.flags, seen).map((t) => t.id),
+    );
+    const openNpcs = new Set(
+      availableNpcs(this.graph, loc, this.flags).map((n) => n.id),
+    );
+    const hotspots: SceneHotspot[] = [];
+    for (const pin of pins) {
+      const inspectId =
+        pin.interaction === "inspect" ? pin.linkNodeId : undefined;
+      const npcId = pin.interaction === "talk" ? pin.linkNodeId : undefined;
+      if (inspectId && !openInspect.has(inspectId)) continue;
+      if (npcId && !openNpcs.has(npcId)) continue;
+      hotspots.push({
+        id: pin.id,
+        label: pin.label ?? "",
+        image: pin.url,
+        x: pin.x,
+        y: pin.y,
+        w: pin.w,
+        h: pin.h,
+        kind: npcId ? "npc" : "inspect",
+        inspectId,
+        npcId,
+      });
+    }
+    return hotspots;
   }
 
   exportState(): EngineState {
