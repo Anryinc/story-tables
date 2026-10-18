@@ -155,7 +155,7 @@ const nodes: ScenarioNode[] = [
     "Скамейки, остывший самовар, стекло в разводах.",
     "/third-bell/hall.jpg",
     [
-      pin("so_ida", "Ида", "/third-bell/ida.jpg", 15, 32, 16, 52, "npc_ida", "talk", "npc"),
+      pin("so_ida", "Ида", "/third-bell/ida.png", 15, 32, 16, 52, "npc_ida", "talk", "npc"),
       pin("so_glass", "Стекло", "/third-bell/glass.jpg", 44, 0, 26, 56, "ins_glass", "inspect"),
     ],
   ),
@@ -219,7 +219,7 @@ const nodes: ScenarioNode[] = [
       title: "Кассир Ида",
       npcName: "Кассир Ида",
       npcIntro: "Стоит у двери в кассу и не смотрит на рельсы.",
-      portraitUrl: "/third-bell/ida.jpg",
+      portraitUrl: "/third-bell/ida.png",
       talkOptions: [askTrain, askDuty],
     },
   },

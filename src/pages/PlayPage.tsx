@@ -195,6 +195,7 @@ export function PlayPage() {
             </p>
           ) : null}
           <PlayConsole
+          dock
           room={room}
           onIntent={(intent) => send({ t: "intent", clientId, intent })}
           onInspect={(inspectId) =>

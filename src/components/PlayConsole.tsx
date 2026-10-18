@@ -19,6 +19,7 @@ export function PlayConsole({
   onTalk,
   onShare,
   onClear,
+  dock = false,
 }: {
   room: TurnSnapshot;
   onIntent: (intent: ActionIntent) => void;
@@ -26,6 +27,8 @@ export function PlayConsole({
   onTalk: (npcId: string, optionId: string) => void;
   onShare: (memoryId: string, to: string) => void;
   onClear: () => void;
+  /** Phone page: tabs sit under the scrolling pane. Desktop table: tabs stay in the page flow. */
+  dock?: boolean;
 }) {
   const [tab, setTab] = useState<Tab>("scene");
   const [npc, setNpc] = useState<SceneHotspot | null>(null);
@@ -36,8 +39,27 @@ export function PlayConsole({
   );
   const powers = room.availableActions.filter((a) => a.intent.type === "ability");
 
+  const travel = moves.filter((a) => a.intent.type === "move");
+  const hold = moves.find((a) => a.intent.type === "wait");
+
   return (
-    <div style={{ maxWidth: 440, margin: "0 auto", padding: "12px 16px 88px" }}>
+    <div
+      style={{
+        maxWidth: dock ? 440 : "100%",
+        margin: dock ? "0 auto" : undefined,
+        display: "flex",
+        flexDirection: "column",
+        height: dock ? "100dvh" : undefined,
+        minHeight: dock ? 0 : undefined,
+      }}
+    >
+      <div
+        style={{
+          flex: dock ? "1 1 auto" : undefined,
+          overflow: dock ? "auto" : "visible",
+          padding: dock ? "12px 16px 16px" : "0 0 12px",
+        }}
+      >
       {tab === "scene" ? (
         <>
           <p className="brass" style={{ fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase" }}>
@@ -61,7 +83,7 @@ export function PlayConsole({
             {room.hereWith.length ? `Здесь же: ${room.hereWith.join(", ")}` : "Вы одни в локации"}
           </p>
           <p className="faint" style={{ fontSize: 12 }}>
-            Белая искра — осмотр. Латунная — человек. Ход тратят только переход и способность.
+            Искра — осмотр. Человек на сцене — разговор. Ход тратят только переход и способность.
           </p>
           <h2 style={{ fontSize: 13, color: "var(--brass)", marginTop: 16 }}>Куда идти</h2>
           {room.myIntent ? (
@@ -70,7 +92,7 @@ export function PlayConsole({
             </button>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
-              {moves.map((a) => (
+              {travel.map((a) => (
                 <button
                   key={a.id}
                   type="button"
@@ -81,6 +103,23 @@ export function PlayConsole({
                   {a.label}
                 </button>
               ))}
+              <hr
+                style={{
+                  border: "none",
+                  borderTop: "1px solid var(--line)",
+                  margin: "8px 0",
+                }}
+              />
+              {hold ? (
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ height: "auto", padding: 12, textAlign: "left" }}
+                  onClick={() => onIntent(hold.intent)}
+                >
+                  {hold.label}
+                </button>
+              ) : null}
             </div>
           )}
         </>
@@ -253,7 +292,14 @@ export function PlayConsole({
               <img
                 src={npc.image}
                 alt=""
-                style={{ width: 96, height: 128, objectFit: "cover", borderRadius: 12 }}
+                style={{
+                  width: 140,
+                  height: 220,
+                  objectFit: "contain",
+                  objectPosition: "center bottom",
+                  display: "block",
+                  background: "transparent",
+                }}
               />
             ) : null}
             {(npc.talkOptions ?? []).length === 0 ? (
@@ -280,20 +326,17 @@ export function PlayConsole({
           </div>
         </div>
       ) : null}
+      </div>
 
       <nav
         style={{
-          position: "fixed",
-          left: 0,
-          right: 0,
-          bottom: 0,
           display: "flex",
           justifyContent: "space-around",
           gap: 4,
           padding: "8px 8px calc(8px + env(safe-area-inset-bottom))",
           background: "#0c0b0a",
           borderTop: "1px solid var(--line)",
-          zIndex: 20,
+          flex: "0 0 auto",
         }}
       >
         {TABS.map((item) => (
