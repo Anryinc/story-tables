@@ -12,6 +12,17 @@ const TABS: { id: Tab; label: string }[] = [
   { id: "file", label: "Дело" },
 ];
 
+function intentLabel(intent: ActionIntent, actions: { intent: ActionIntent; label: string }[]) {
+  const hit = actions.find((a) => JSON.stringify(a.intent) === JSON.stringify(intent));
+  if (hit) return hit.label;
+  if (intent.type === "inspect") return "осмотр";
+  if (intent.type === "talk") return "разговор";
+  if (intent.type === "move") return "переход";
+  if (intent.type === "ability") return "способность";
+  if (intent.type === "wait") return "ожидание";
+  return "ход";
+}
+
 export function PlayConsole({
   room,
   onIntent,
@@ -83,13 +94,18 @@ export function PlayConsole({
             {room.hereWith.length ? `Здесь же: ${room.hereWith.join(", ")}` : "Вы одни в локации"}
           </p>
           <p className="faint" style={{ fontSize: 12 }}>
-            Искра — осмотр. Человек на сцене — разговор. Ход тратят только переход и способность.
+            Искра, разговор, переход и способность тратят ход. Раунд закрывается, когда ход сдали все.
           </p>
           <h2 style={{ fontSize: 13, color: "var(--brass)", marginTop: 16 }}>Куда идти</h2>
           {room.myIntent ? (
-            <button type="button" className="btn" onClick={onClear}>
-              Отменить ход
-            </button>
+            <div style={{ display: "grid", gap: 8 }}>
+              <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+                Ход сдан: {intentLabel(room.myIntent, room.availableActions)}
+              </p>
+              <button type="button" className="btn" onClick={onClear}>
+                Отменить ход
+              </button>
+            </div>
           ) : (
             <div style={{ display: "grid", gap: 8 }}>
               {travel.map((a) => (
@@ -199,9 +215,14 @@ export function PlayConsole({
           {powers.length === 0 ? (
             <p className="muted">Нет доступных сил. Пустая роль или кулдаун.</p>
           ) : room.myIntent ? (
-            <button type="button" className="btn" onClick={onClear}>
-              Отменить ход
-            </button>
+            <div style={{ display: "grid", gap: 8 }}>
+              <p className="muted" style={{ fontSize: 13, margin: 0 }}>
+                Ход сдан: {intentLabel(room.myIntent, room.availableActions)}
+              </p>
+              <button type="button" className="btn" onClick={onClear}>
+                Отменить ход
+              </button>
+            </div>
           ) : (
             powers.map((a) => (
               <button

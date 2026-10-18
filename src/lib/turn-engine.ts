@@ -236,9 +236,6 @@ export class TurnEngine {
     if (this.phase !== "planning") return { ok: false as const, error: "Нельзя" };
     const seat = this.seats.find((s) => s.clientId === clientId);
     if (!seat?.characterId) return { ok: false as const, error: "Нужна роль" };
-    if (intent.type === "inspect" || intent.type === "talk") {
-      return this.explore(clientId, intent);
-    }
     const ok = this.actionsFor(clientId).some(
       (a) => intentKey(a.intent) === intentKey(intent),
     );
@@ -644,6 +641,32 @@ export class TurnEngine {
         intent: { type: "move", toLocationId: e.to },
         label: `Идти: ${e.label}`,
       });
+    }
+
+    const seen = this.inspected.get(clientId) ?? new Set();
+    for (const t of availableInspect(
+      this.graph,
+      loc,
+      this.flags,
+      seen,
+      this.worldClaimed,
+      this.stateIds(clientId),
+    )) {
+      opts.push({
+        id: `inspect:${t.id}`,
+        intent: { type: "inspect", targetId: t.id },
+        label: `Осмотреть: ${t.label}`,
+      });
+    }
+    const used = this.talkUsed.get(clientId) ?? new Set();
+    for (const npc of availableNpcs(this.graph, loc, this.flags)) {
+      for (const o of availableTalkOptions(npc, this.flags, used)) {
+        opts.push({
+          id: `talk:${npc.id}:${o.id}`,
+          intent: { type: "talk", npcId: npc.id, optionId: o.id },
+          label: `${npc.name}: ${o.label}`,
+        });
+      }
     }
 
     const ch = this.charById(seat.characterId);
