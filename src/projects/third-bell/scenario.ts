@@ -270,7 +270,7 @@ const nodes: ScenarioNode[] = [
     "Разводы на стекле",
     "После духовного зрения разводы складываются в ладонь, прижатую с той стороны.",
     {
-      requiresFlag: "spirit_vision",
+      requiresAbilityId: "fool.9.spirit_vision",
       imageUrl: "/third-bell/glass.jpg",
       grantState: {
         id: "glass_hand",

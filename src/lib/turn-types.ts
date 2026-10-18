@@ -6,13 +6,14 @@ export type ActionIntent =
   | { type: "inspect"; targetId: string }
   | { type: "talk"; npcId: string; optionId: string }
   | { type: "share"; clueId: string }
-  | { type: "ability"; abilityId: string };
+  | { type: "ability"; abilityId: string; targetId?: string; targetLabel?: string };
 
 export type ActionOption = {
   id: string;
   intent: ActionIntent;
   label: string;
   detail?: string;
+  needsTarget?: "person" | "spark" | "any";
 };
 
 export type Seat = {

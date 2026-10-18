@@ -29,11 +29,13 @@ export function availableInspect(
   seen: Set<string>,
   worldClaimed?: Set<string>,
   stateIds?: Set<string>,
+  openAbilities?: Set<string>,
 ): GraphInspectable[] {
   const loc = graph.locations[locationId];
   if (!loc) return [];
   return loc.inspect.filter((t) => {
     if (!gateOpen(t, flags)) return false;
+    if (t.requiresAbilityId && !openAbilities?.has(t.requiresAbilityId)) return false;
     if (t.requiresState && !stateIds?.has(t.requiresState)) return false;
     if (t.audience === "world" && worldClaimed?.has(t.id)) return false;
     if (t.once !== false && t.audience !== "world" && seen.has(t.id)) return false;
@@ -45,10 +47,15 @@ export function availableNpcs(
   graph: GraphDocument,
   locationId: string,
   flags: Record<string, boolean>,
+  openAbilities?: Set<string>,
 ): GraphNpc[] {
   const loc = graph.locations[locationId];
   if (!loc?.npcs) return [];
-  return loc.npcs.filter((n) => gateOpen(n, flags));
+  return loc.npcs.filter((n) => {
+    if (!gateOpen(n, flags)) return false;
+    if (n.requiresAbilityId && !openAbilities?.has(n.requiresAbilityId)) return false;
+    return true;
+  });
 }
 
 export function availableTalkOptions(

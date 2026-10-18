@@ -20,10 +20,18 @@ export type AbilityMechanics = {
   effects: AbilityEffect[];
 };
 
+export type AbilityKind = "active" | "passive";
+/** none — без цели. person — кто-то в локации. spark — искра. any — человек или искра. */
+export type AbilityTarget = "none" | "person" | "spark" | "any";
+
 export type AbilityDef = {
   id: string;
   nameRu: string;
   descriptionRu: string;
+  /** По умолчанию активная: тратит ход. Пассивная работает, пока зелье на персонаже. */
+  kind?: AbilityKind;
+  /** По умолчанию без цели. */
+  target?: AbilityTarget;
   mechanics: AbilityMechanics;
 };
 
@@ -68,6 +76,23 @@ export function abilityIdsForSequence(
     }
   }
   return ids;
+}
+
+export function abilitiesForSequence(
+  base: LoreBase,
+  pathwayId: string,
+  rank: number,
+): { id: string; nameRu: string; rank: number; kind: AbilityKind }[] {
+  const path = base.pathways.find((p) => p.id === pathwayId);
+  if (!path) return [];
+  const out: { id: string; nameRu: string; rank: number; kind: AbilityKind }[] = [];
+  for (const seq of path.sequences) {
+    if (seq.rank < rank) continue;
+    for (const a of seq.abilities) {
+      out.push({ id: a.id, nameRu: a.nameRu, rank: seq.rank, kind: a.kind ?? "active" });
+    }
+  }
+  return out.sort((a, b) => b.rank - a.rank);
 }
 
 export function findAbility(base: LoreBase, abilityId: string): AbilityDef | null {

@@ -70,6 +70,7 @@ export class TurnEngine {
   private shareBoard: SharePayload[] = [];
   private popupsOf = new Map<string, PopupNotice[]>();
   private abilityCooldown = new Map<string, Map<string, number>>();
+  private usedAbilities = new Map<string, Set<string>>();
   private lastPublicEvent: string | null = null;
   private listeners = new Set<() => void>();
   private firedTimelineRounds = new Set<number>();
@@ -218,6 +219,7 @@ export class TurnEngine {
       this.statesOf.set(s.clientId, []);
       this.popupsOf.set(s.clientId, []);
       this.abilityCooldown.set(s.clientId, new Map());
+      this.usedAbilities.set(s.clientId, new Set());
     }
     this.flags = {};
     this.worldClaimed.clear();
@@ -448,7 +450,7 @@ export class TurnEngine {
       } else if (intent.type === "share") {
         this.resolveShare(s.clientId, intent.clueId);
       } else if (intent.type === "ability") {
-        this.resolveAbility(s.clientId, intent.abilityId);
+        this.resolveAbility(s.clientId, intent.abilityId, intent.targetLabel);
       }
     }
     this.intents.clear();
@@ -464,7 +466,7 @@ export class TurnEngine {
     this.emit();
   }
 
-  private resolveAbility(clientId: string, abilityId: string) {
+  private resolveAbility(clientId: string, abilityId: string, targetLabel?: string) {
     const seat = this.seats.find((s) => s.clientId === clientId);
     if (!seat?.characterId) return;
     const ch = this.charById(seat.characterId);
@@ -478,26 +480,27 @@ export class TurnEngine {
 
     for (const fx of ab.mechanics.effects) {
       if (fx.type === "reveal_text") {
+        const body = targetLabel ? `${fx.body} Цель: ${targetLabel}.` : fx.body;
         if (fx.scope === "self") {
-          this.pushPopup(clientId, fx.title, fx.body, this.round);
-          this.lastResultOf.set(clientId, fx.body);
+          this.pushPopup(clientId, fx.title, body, this.round);
+          this.lastResultOf.set(clientId, body);
         } else if (fx.scope === "all") {
           for (const s of this.players()) {
-            this.pushPopup(s.clientId, fx.title, fx.body, this.round);
+            this.pushPopup(s.clientId, fx.title, body, this.round);
           }
         } else if (fx.scope === "same_location") {
           const loc = this.locationOf.get(clientId);
           for (const s of this.players()) {
             if (this.locationOf.get(s.clientId) === loc) {
-              this.pushPopup(s.clientId, fx.title, fx.body, this.round);
+              this.pushPopup(s.clientId, fx.title, body, this.round);
             }
           }
         }
-        this.pushJournal(clientId, ab.nameRu, fx.body);
+        this.pushJournal(clientId, ab.nameRu, body);
         this.addMemory(clientId, {
           id: `ab:${abilityId}:${fx.title}`,
           title: fx.title || ab.nameRu,
-          body: fx.body,
+          body,
           source: "Способность",
         });
       } else if (fx.type === "set_flag") {
@@ -522,6 +525,9 @@ export class TurnEngine {
       this.abilityCooldown.set(clientId, map);
     }
     this.flags[`ability_used:${abilityId}`] = true;
+    const used = this.usedAbilities.get(clientId) ?? new Set();
+    used.add(abilityId);
+    this.usedAbilities.set(clientId, used);
   }
 
   private resolveInspect(clientId: string, targetId: string) {
@@ -535,6 +541,7 @@ export class TurnEngine {
       seen,
       this.worldClaimed,
       this.stateIds(clientId),
+      this.openAbilities(clientId),
     ).find((x) => x.id === targetId);
     if (!t) {
       this.lastResultOf.set(clientId, "Уже не на что смотреть.");
@@ -625,6 +632,26 @@ export class TurnEngine {
     this.lastPublicEvent = `${fromName} → ${locName}: ${clue.title}`;
   }
 
+  private heldAbilityIds(clientId: string): string[] {
+    const seat = this.seats.find((s) => s.clientId === clientId);
+    const ch = seat?.characterId ? this.charById(seat.characterId) : null;
+    if (!ch?.lore) return [];
+    return ch.lore.enabledAbilityIds ?? [];
+  }
+
+  /** Passive powers are open immediately. Active ones open after this player uses them. */
+  private openAbilities(clientId: string): Set<string> {
+    const base = getLoreBase(this.loreBaseId);
+    const used = this.usedAbilities.get(clientId) ?? new Set();
+    const open = new Set<string>();
+    for (const id of this.heldAbilityIds(clientId)) {
+      const ab = base ? findAbility(base, id) : null;
+      if (!ab) continue;
+      if ((ab.kind ?? "active") === "passive" || used.has(id)) open.add(id);
+    }
+    return open;
+  }
+
   private actionsFor(clientId: string): ActionOption[] {
     if (this.phase !== "planning") return [];
     const seat = this.seats.find((s) => s.clientId === clientId);
@@ -643,6 +670,7 @@ export class TurnEngine {
       });
     }
 
+    const open = this.openAbilities(clientId);
     const seen = this.inspected.get(clientId) ?? new Set();
     for (const t of availableInspect(
       this.graph,
@@ -651,6 +679,7 @@ export class TurnEngine {
       seen,
       this.worldClaimed,
       this.stateIds(clientId),
+      open,
     )) {
       opts.push({
         id: `inspect:${t.id}`,
@@ -659,7 +688,7 @@ export class TurnEngine {
       });
     }
     const used = this.talkUsed.get(clientId) ?? new Set();
-    for (const npc of availableNpcs(this.graph, loc, this.flags)) {
+    for (const npc of availableNpcs(this.graph, loc, this.flags, open)) {
       for (const o of availableTalkOptions(npc, this.flags, used)) {
         opts.push({
           id: `talk:${npc.id}:${o.id}`,
@@ -677,6 +706,7 @@ export class TurnEngine {
       for (const aid of ids) {
         const ab = base ? findAbility(base, aid) : null;
         if (!ab) continue;
+        if ((ab.kind ?? "active") === "passive") continue;
         if (ab.mechanics.requiresFlags?.some((f) => !this.flags[f])) continue;
         if (ab.mechanics.oncePerGame && this.flags[`ability_used:${aid}`]) continue;
         const until = cdMap.get(aid);
@@ -685,7 +715,10 @@ export class TurnEngine {
           id: `ability:${aid}`,
           intent: { type: "ability", abilityId: aid },
           label: `✧ ${ab.nameRu}`,
-          detail: ab.descriptionRu,
+          detail: ab.target && ab.target !== "none"
+            ? `${ab.descriptionRu} Нужна цель.`
+            : ab.descriptionRu,
+          needsTarget: ab.target && ab.target !== "none" ? ab.target : undefined,
         });
       }
     }
@@ -735,7 +768,7 @@ export class TurnEngine {
       )
       .map((s) => ({ clientId: s.clientId, name: s.displayName }));
     const hereNpcs = loc
-      ? availableNpcs(this.graph, loc, this.flags).map((n) => ({
+      ? availableNpcs(this.graph, loc, this.flags, this.openAbilities(clientId)).map((n) => ({
           id: n.id,
           name: n.name,
           intro: n.intro,
@@ -789,6 +822,7 @@ export class TurnEngine {
     if (!loc || this.phase !== "planning") return [];
     const pins = this.graph.locations[loc]?.scene ?? [];
     const seen = this.inspected.get(clientId) ?? new Set<string>();
+    const open = this.openAbilities(clientId);
     const openInspect = new Set(
       availableInspect(
         this.graph,
@@ -797,10 +831,11 @@ export class TurnEngine {
         seen,
         this.worldClaimed,
         this.stateIds(clientId),
+        open,
       ).map((t) => t.id),
     );
     const openNpcs = new Set(
-      availableNpcs(this.graph, loc, this.flags).map((n) => n.id),
+      availableNpcs(this.graph, loc, this.flags, open).map((n) => n.id),
     );
     const used = this.talkUsed.get(clientId) ?? new Set<string>();
     const hotspots: SceneHotspot[] = [];

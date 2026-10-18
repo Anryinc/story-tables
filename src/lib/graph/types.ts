@@ -26,6 +26,8 @@ export type GraphInspectable = FlagGate & {
   item?: { id: string; title: string; body: string; imageUrl?: string };
   grantState?: { id: string; title: string; body: string; imageUrl?: string };
   requiresState?: string;
+  /** Видно только тому, у кого эта способность пассивна или уже применена. */
+  requiresAbilityId?: string;
 };
 
 export type GraphTalkOption = FlagGate & {
@@ -43,6 +45,7 @@ export type GraphNpc = FlagGate & {
   intro?: string;
   portraitUrl?: string;
   options: GraphTalkOption[];
+  requiresAbilityId?: string;
 };
 
 export type GraphScenePin = {

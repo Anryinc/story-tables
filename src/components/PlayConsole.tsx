@@ -44,6 +44,7 @@ export function PlayConsole({
   const [tab, setTab] = useState<Tab>("scene");
   const [npc, setNpc] = useState<SceneHotspot | null>(null);
   const [shareId, setShareId] = useState<string | null>(null);
+  const [aim, setAim] = useState<string | null>(null);
   const me = room.characterOptions.find((c) => c.id === room.myCharacterId);
   const moves = room.availableActions.filter(
     (a) => a.intent.type === "move" || a.intent.type === "wait",
@@ -212,6 +213,11 @@ export function PlayConsole({
           <h1 className="font-display" style={{ color: "var(--paper)" }}>
             Способности
           </h1>
+          {(me?.abilities ?? []).length > 0 ? (
+            <p className="faint" style={{ fontSize: 12 }}>
+              Пассивные работают сами: {me?.abilities.map((a) => a.name).join(", ")}.
+            </p>
+          ) : null}
           {powers.length === 0 ? (
             <p className="muted">Нет доступных сил. Пустая роль или кулдаун.</p>
           ) : room.myIntent ? (
@@ -224,18 +230,61 @@ export function PlayConsole({
               </button>
             </div>
           ) : (
-            powers.map((a) => (
-              <button
-                key={a.id}
-                type="button"
-                className="btn"
-                style={{ height: "auto", padding: 12, textAlign: "left", width: "100%", marginBottom: 8 }}
-                onClick={() => onIntent(a.intent)}
-              >
-                <div style={{ color: "var(--paper)" }}>{a.label}</div>
-                {a.detail ? <div className="faint" style={{ fontSize: 12 }}>{a.detail}</div> : null}
-              </button>
-            ))
+            powers.map((a) => {
+              const aiming = aim === a.id;
+              const people = a.needsTarget === "person" || a.needsTarget === "any" ? room.company : [];
+              const sparks = a.needsTarget === "spark" || a.needsTarget === "any"
+                ? room.myScene.filter((p) => p.kind !== "npc")
+                : [];
+              return (
+                <div key={a.id} className="card" style={{ marginBottom: 8, padding: 10 }}>
+                  <div style={{ color: "var(--paper)" }}>{a.label}</div>
+                  {a.detail ? <div className="faint" style={{ fontSize: 12 }}>{a.detail}</div> : null}
+                  {a.needsTarget ? (
+                    aiming ? (
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginTop: 8 }}>
+                        {people.map((p) => (
+                          <button
+                            key={p.clientId}
+                            type="button"
+                            className="btn"
+                            style={{ height: 30, fontSize: 12 }}
+                            onClick={() => onIntent({ ...a.intent, targetId: p.clientId, targetLabel: p.name } as typeof a.intent)}
+                          >
+                            {p.name}
+                          </button>
+                        ))}
+                        {sparks.map((p) => (
+                          <button
+                            key={p.id}
+                            type="button"
+                            className="btn"
+                            style={{ height: 30, fontSize: 12 }}
+                            onClick={() => onIntent({ ...a.intent, targetId: p.inspectId || p.id, targetLabel: p.label } as typeof a.intent)}
+                          >
+                            {p.label}
+                          </button>
+                        ))}
+                        {people.length + sparks.length === 0 ? (
+                          <span className="faint" style={{ fontSize: 12 }}>Рядом не на что нацелиться.</span>
+                        ) : null}
+                        <button type="button" className="btn" style={{ height: 30, fontSize: 12 }} onClick={() => setAim(null)}>
+                          Отмена
+                        </button>
+                      </div>
+                    ) : (
+                      <button type="button" className="btn" style={{ marginTop: 8, height: 32 }} onClick={() => setAim(a.id)}>
+                        Выбрать цель
+                      </button>
+                    )
+                  ) : (
+                    <button type="button" className="btn" style={{ marginTop: 8, height: 32 }} onClick={() => onIntent(a.intent)}>
+                      Применить
+                    </button>
+                  )}
+                </div>
+              );
+            })
           )}
         </>
       ) : null}

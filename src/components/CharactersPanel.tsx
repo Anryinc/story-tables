@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from "react";
 import { addAssetFromFile, resolveAssetUrl } from "@/lib/assets/store";
 import { CharacterPortrait } from "@/components/CharacterPickCard";
-import { abilityIdsForSequence, findSequence } from "@/lib/lore/types";
+import { abilityIdsForSequence, abilitiesForSequence, findSequence } from "@/lib/lore/types";
 import { getLoreBase, listLoreBases } from "@/lib/lore/registry";
 import {
   createCharacter,
@@ -342,11 +342,13 @@ export function CharactersPanel({
                             color: "var(--faint)",
                           }}
                         >
-                          {seq.abilities.map((a) => (
+                          {abilitiesForSequence(base!, c.lore!.pathwayId, c.lore!.sequenceRank).map((a) => (
                             <li key={a.id} style={{ marginBottom: 2 }}>
                               <span style={{ color: "var(--brass)" }}>{a.nameRu}</span>
-                              {" — "}
-                              {a.descriptionRu}
+                              {" · "}
+                              <span>из C{a.rank}</span>
+                              {" · "}
+                              {a.kind === "passive" ? "пассивная" : "активная"}
                             </li>
                           ))}
                         </ul>

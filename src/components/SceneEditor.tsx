@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as RE, type ReactNode } from "react";
+import { getLoreBase } from "@/lib/lore/registry";
 import { addAssetFromFile, resolveAssetUrl } from "@/lib/assets/store";
 import {
   createNode,
@@ -53,12 +54,14 @@ function pickStudioBackground(
 function nodeOpen(
   node: ScenarioNode | undefined,
   flags: Record<string, boolean>,
+  openAbilities?: Set<string>,
 ): boolean {
   if (!node) return true;
   const d = node.data;
   if (d.requiresFlag && !flags[d.requiresFlag]) return false;
   if (d.requiresAnyFlags?.length && !d.requiresAnyFlags.some((f) => flags[f])) return false;
   if (d.hideIfFlag && flags[d.hideIfFlag]) return false;
+  if (d.requiresAbilityId && !openAbilities?.has(d.requiresAbilityId)) return false;
   return true;
 }
 
@@ -112,6 +115,7 @@ export function SceneEditor({
   const [sel, setSel] = useState<Sel>({ kind: "room" });
   const [uploading, setUploading] = useState(false);
   const [previewFlags, setPreviewFlags] = useState<string[]>([]);
+  const [previewAbilities, setPreviewAbilities] = useState<string[]>([]);
   const [flagDraft, setFlagDraft] = useState("");
   const [previewRound, setPreviewRound] = useState(1);
   const [previewSeen, setPreviewSeen] = useState<string[]>([]);
@@ -137,6 +141,13 @@ export function SceneEditor({
   const objects = loc.data.sceneObjects ?? [];
   const backgrounds = loc.data.backgrounds ?? [];
   const previewFlagMap = Object.fromEntries(previewFlags.map((f) => [f, true]));
+  const previewAbilitySet = new Set(previewAbilities);
+  const loreBase = getLoreBase(doc.loreBaseId);
+  const loreAbilities = loreBase
+    ? loreBase.pathways.flatMap((p) =>
+        p.sequences.flatMap((s) => s.abilities.map((a) => ({ id: a.id, nameRu: `${p.nameRu} · ${a.nameRu}` }))),
+      )
+    : [];
   const stageBg = pickStudioBackground(backgrounds, loc.data.background, previewFlagMap, previewRound);
   const { inspects, npcs } = childrenOf(doc, loc.id);
   const exits = exitsOf(doc, loc.id);
@@ -465,7 +476,7 @@ export function SceneEditor({
           )}
           {objects.map((o) => {
             const linked = selectedNodeOf(doc, o);
-            const open = nodeOpen(linked, previewFlagMap);
+            const open = nodeOpen(linked, previewFlagMap, previewAbilitySet);
             const spent = linked ? previewSeen.includes(linked.id) && linked.data.once !== false : false;
             if (!editing && (!open || spent)) return null;
             const isNpc = o.kind === "npc" || o.interaction === "talk";
@@ -690,6 +701,7 @@ export function SceneEditor({
                 style={{ height: 28, fontSize: 11 }}
                 onClick={() => {
                   setPreviewFlags([]);
+                  setPreviewAbilities([]);
                   setPreviewSeen([]);
                   setPreviewPopup(null);
                   setPreviewRound(1);
@@ -698,16 +710,39 @@ export function SceneEditor({
                 Сбросить
               </button>
             </div>
+            {loreAbilities.length > 0 ? (
+              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center" }}>
+                <span className="brass" style={{ fontSize: 11 }}>Способности</span>
+                {loreAbilities.map((a) => {
+                  const on = previewAbilities.includes(a.id);
+                  return (
+                    <button
+                      key={a.id}
+                      type="button"
+                      className="btn"
+                      style={{ height: 26, fontSize: 11, borderColor: on ? "var(--brass)" : undefined }}
+                      onClick={() =>
+                        setPreviewAbilities((list) =>
+                          on ? list.filter((x) => x !== a.id) : [...list, a.id],
+                        )
+                      }
+                    >
+                      {on ? "✓ " : ""}{a.nameRu}
+                    </button>
+                  );
+                })}
+              </div>
+            ) : null}
             <p className="faint" style={{ fontSize: 11, margin: 0 }}>
               Клик по искре открывает окно игрока. В партию ничего не пишется.
               {objects.some((o) => {
                 const n = selectedNodeOf(doc, o);
-                return n && !nodeOpen(n, previewFlagMap);
+                return n && !nodeOpen(n, previewFlagMap, previewAbilitySet);
               })
                 ? ` Скрыто: ${objects
                     .filter((o) => {
                       const n = selectedNodeOf(doc, o);
-                      return n && !nodeOpen(n, previewFlagMap);
+                      return n && !nodeOpen(n, previewFlagMap, previewAbilitySet);
                     })
                     .map((o) => o.label)
                     .join(", ")}.`
@@ -856,6 +891,7 @@ export function SceneEditor({
             <SparkInspector
               node={selectedNode}
               pin={selectedPin}
+              abilities={loreAbilities}
               onNode={(d) => patchNode(selectedNode.id, d)}
               onPin={(d) => patchObject(selectedPin.id, d)}
               onDelete={removeSelected}
@@ -1107,6 +1143,7 @@ function RoomInspector({
 function SparkInspector({
   node,
   pin,
+  abilities,
   onNode,
   onPin,
   onDelete,
@@ -1114,6 +1151,7 @@ function SparkInspector({
 }: {
   node: ScenarioNode;
   pin: SceneObject;
+  abilities: { id: string; nameRu: string }[];
   onNode: (d: Partial<ScenarioNode["data"]>) => void;
   onPin: (d: Partial<SceneObject>) => void;
   onDelete: () => void;
@@ -1208,6 +1246,21 @@ function SparkInspector({
         />
       </Section>
       <Section title="Когда видно / что ставит">
+        {abilities.length > 0 ? (
+          <label className="muted" style={{ fontSize: 11, display: "block" }}>
+            Нужна способность
+            <select
+              value={d.requiresAbilityId ?? ""}
+              onChange={(e) => onNode({ requiresAbilityId: e.target.value || undefined })}
+              style={field}
+            >
+              <option value="">— не нужна —</option>
+              {abilities.map((a) => (
+                <option key={a.id} value={a.id}>{a.nameRu}</option>
+              ))}
+            </select>
+          </label>
+        ) : null}
         <input
           value={d.requiresFlag ?? ""}
           placeholder="Нужен флаг"

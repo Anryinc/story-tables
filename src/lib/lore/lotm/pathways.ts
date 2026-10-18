@@ -53,6 +53,7 @@ const foolRich: Record<number, AbilityDef[]> = {
       id: "fool.9.spirit_vision",
       nameRu: "Духовное зрение",
       descriptionRu: "Видеть ауры и духовные следы на предметах и людях.",
+      kind: "passive",
       mechanics: {
         cost: "action",
         cooldownRounds: 0,
@@ -73,6 +74,8 @@ const foolRich: Record<number, AbilityDef[]> = {
       id: "fool.9.divination",
       nameRu: "Гадание",
       descriptionRu: "Простой ритуал на ответ «да/нет» или направление угрозы.",
+      kind: "active",
+      target: "any",
       mechanics: {
         cost: "action",
         cooldownRounds: 1,
