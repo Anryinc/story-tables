@@ -1,5 +1,6 @@
 import { useState, type CSSProperties } from "react";
 import { addAssetFromFile, resolveAssetUrl } from "@/lib/assets/store";
+import { CharacterPortrait } from "@/components/CharacterPickCard";
 import { abilityIdsForSequence, findSequence } from "@/lib/lore/types";
 import { getLoreBase, listLoreBases } from "@/lib/lore/registry";
 import {
@@ -125,33 +126,9 @@ export function CharactersPanel({
                     borderBottom: "1px solid var(--line)",
                   }}
                 >
-                  {c.portraitUrl ? (
-                    <img
-                      src={c.portraitUrl}
-                      alt=""
-                      style={{
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "cover",
-                        display: "block",
-                      }}
-                    />
-                  ) : (
-                    <div
-                      style={{
-                        position: "absolute",
-                        inset: 0,
-                        display: "grid",
-                        placeItems: "center",
-                        color: "var(--faint)",
-                        fontSize: 13,
-                        textAlign: "center",
-                        padding: 16,
-                      }}
-                    >
-                      Нет портрета
-                    </div>
-                  )}
+                  <div style={{ position: "absolute", inset: 0 }}>
+                    <CharacterPortrait url={c.portraitUrl} gender={c.gender} />
+                  </div>
                   <label
                     style={{
                       position: "absolute",
@@ -179,22 +156,46 @@ export function CharactersPanel({
 
                 <div style={{ padding: "0 12px 12px", display: "grid", gap: 8 }}>
                   {/* Name */}
-                  <input
-                    value={c.name}
-                    onChange={(e) => update(c.id, { name: e.target.value })}
-                    style={{
-                      ...field,
-                      marginTop: 0,
-                      fontFamily: '"Cormorant Garamond", serif',
-                      fontSize: 20,
-                      border: "none",
-                      borderBottom: "1px solid var(--line)",
-                      borderRadius: 0,
-                      padding: "4px 0",
-                      background: "transparent",
-                    }}
-                    placeholder="Имя"
-                  />
+                  <label className="muted" style={{ fontSize: 11 }}>
+                    Роль
+                    <input
+                      value={c.name}
+                      onChange={(e) => update(c.id, { name: e.target.value })}
+                      style={{
+                        ...field,
+                        marginTop: 4,
+                        fontFamily: '"Cormorant Garamond", serif',
+                        fontSize: 20,
+                      }}
+                      placeholder="Следователь"
+                    />
+                  </label>
+                  <label className="muted" style={{ fontSize: 11 }}>
+                    Имя
+                    <input
+                      value={c.givenName ?? ""}
+                      onChange={(e) =>
+                        update(c.id, { givenName: e.target.value || undefined })
+                      }
+                      style={field}
+                      placeholder="Если пусто — на карточке прочерк"
+                    />
+                  </label>
+                  <label className="muted" style={{ fontSize: 11 }}>
+                    Силуэт, если нет портрета
+                    <select
+                      value={c.gender ?? "male"}
+                      onChange={(e) =>
+                        update(c.id, {
+                          gender: e.target.value === "female" ? "female" : "male",
+                        })
+                      }
+                      style={field}
+                    >
+                      <option value="male">Мужской</option>
+                      <option value="female">Женский</option>
+                    </select>
+                  </label>
 
                   {/* Backstory */}
                   <label className="muted" style={{ fontSize: 11 }}>

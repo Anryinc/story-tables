@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import Peer, { type DataConnection } from "peerjs";
 import { PopupModal } from "@/components/PopupModal";
+import { CharacterPickCard } from "@/components/CharacterPickCard";
 import { getClientId } from "@/lib/ids";
 import {
   makeHostPeerId,
@@ -327,16 +328,20 @@ export function TablePage() {
                 «Персонажи».
               </p>
             ) : (
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8, marginTop: 8 }}>
+              <div
+                style={{
+                  display: "grid",
+                  gap: 12,
+                  marginTop: 8,
+                  gridTemplateColumns: "repeat(auto-fill, minmax(240px, 1fr))",
+                }}
+              >
                 {roles.map((c) => (
-                  <button
+                  <CharacterPickCard
                     key={c.id}
-                    type="button"
-                    className="btn"
-                    disabled={
-                      room.takenCharacterIds.includes(c.id) &&
-                      room.myCharacterId !== c.id
-                    }
+                    character={c}
+                    selected={room.myCharacterId === c.id}
+                    taken={room.takenCharacterIds.includes(c.id)}
                     onClick={() => {
                       engineRef.current?.claim(
                         clientId,
@@ -344,21 +349,7 @@ export function TablePage() {
                       );
                       pushAll();
                     }}
-                    style={{
-                      borderColor:
-                        room.myCharacterId === c.id ? "var(--paper)" : undefined,
-                      height: "auto",
-                      padding: "10px 12px",
-                      textAlign: "left",
-                    }}
-                  >
-                    <div>{c.name}</div>
-                    {c.pathway ? (
-                      <div className="faint" style={{ fontSize: 11 }}>
-                        {c.pathway}
-                      </div>
-                    ) : null}
-                  </button>
+                  />
                 ))}
               </div>
             )}

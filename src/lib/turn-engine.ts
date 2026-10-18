@@ -9,6 +9,7 @@ import type { Clue, GraphDocument } from "./graph/types";
 import { gateOpen } from "./graph/types";
 import { newId } from "./ids";
 import { findAbility, getLoreBase } from "./lore/registry";
+import { abilityIdsForSequence, findSequence } from "./lore/types";
 import type { TimelineRule } from "./scenario/compile";
 import type { ScenarioCharacter } from "./scenario/types";
 import { MAX_PARTY } from "@/projects/roster";
@@ -104,15 +105,37 @@ export class TurnEngine {
   }
 
   private characterOptions(): CharacterOption[] {
-    return this.characters.map((c) => ({
-      id: c.id,
-      name: c.name,
-      blurb: c.blurb,
-      pathway: c.lore
-        ? `${c.lore.pathwayId} · C${c.lore.sequenceRank}`
-        : undefined,
-      portraitUrl: c.portraitUrl,
-    }));
+    return this.characters.map((c) => {
+      const base = getLoreBase(c.lore?.baseId || this.loreBaseId);
+      const seq =
+        base && c.lore
+          ? findSequence(base, c.lore.pathwayId, c.lore.sequenceRank)
+          : null;
+      const path = base?.pathways.find((p) => p.id === c.lore?.pathwayId);
+      const ids = c.lore
+        ? (c.lore.enabledAbilityIds ??
+          (base
+            ? abilityIdsForSequence(base, c.lore.pathwayId, c.lore.sequenceRank)
+            : []))
+        : [];
+      const abilities = ids.flatMap((id) => {
+        const ability = base ? findAbility(base, id) : null;
+        return ability
+          ? [{ name: ability.nameRu, description: ability.descriptionRu }]
+          : [];
+      });
+      return {
+        id: c.id,
+        name: c.name,
+        givenName: c.givenName,
+        blurb: c.blurb,
+        pathway:
+          path && seq ? `${path.nameRu} · C${seq.rank} · ${seq.nameRu}` : undefined,
+        abilities,
+        portraitUrl: c.portraitUrl,
+        gender: c.gender,
+      };
+    });
   }
 
   subscribe(fn: () => void) {

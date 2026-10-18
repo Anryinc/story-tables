@@ -45,12 +45,23 @@ export type JournalEntry = {
   body: string;
 };
 
+export type CharacterAbilityLine = {
+  name: string;
+  description: string;
+};
+
 export type CharacterOption = {
   id: string;
+  /** Название роли, которую берут в лобби. */
   name: string;
+  /** Личное имя. Пустое на карточке рисуется прочерком. */
+  givenName?: string;
   blurb: string;
+  /** Путь и последовательность, если заданы. */
   pathway?: string;
+  abilities: CharacterAbilityLine[];
   portraitUrl?: string;
+  gender?: "male" | "female";
 };
 
 export type PartySeatView = {

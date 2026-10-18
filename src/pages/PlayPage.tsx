@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link, useParams, useSearchParams } from "react-router-dom";
 import type { DataConnection } from "peerjs";
 import { PopupModal } from "@/components/PopupModal";
+import { CharacterPickCard } from "@/components/CharacterPickCard";
 import { getClientId } from "@/lib/ids";
 import { openGuestPeer, type GuestMsg } from "@/lib/p2p";
 import type { ActionIntent, TurnSnapshot } from "@/lib/turn-types";
@@ -149,7 +150,7 @@ export function PlayPage() {
       ) : null}
 
       {room.status === "lobby" || !room.myCharacterId ? (
-        <main style={{ maxWidth: 420, margin: "0 auto", padding: 20 }}>
+        <main style={{ maxWidth: 440, margin: "0 auto", padding: 20 }}>
           <p className="brass" style={{ fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase" }}>
             {room.projectTitle}
           </p>
@@ -160,16 +161,13 @@ export function PlayPage() {
           {roles.length === 0 ? (
             <p className="danger">Нет персонажей в сценарии.</p>
           ) : (
-            <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "grid", gap: 12 }}>
               {roles.map((c) => (
-                <button
+                <CharacterPickCard
                   key={c.id}
-                  type="button"
-                  className="btn"
-                  disabled={
-                    room.takenCharacterIds.includes(c.id) &&
-                    room.myCharacterId !== c.id
-                  }
+                  character={c}
+                  selected={room.myCharacterId === c.id}
+                  taken={room.takenCharacterIds.includes(c.id)}
                   onClick={() =>
                     send({
                       t: "claim",
@@ -177,20 +175,7 @@ export function PlayPage() {
                       characterId: room.myCharacterId === c.id ? null : c.id,
                     })
                   }
-                  style={{
-                    textAlign: "left",
-                    height: "auto",
-                    padding: "12px 14px",
-                    borderColor:
-                      room.myCharacterId === c.id ? "var(--paper)" : "var(--line)",
-                  }}
-                >
-                  <div style={{ color: "var(--paper)" }}>{c.name}</div>
-                  <div className="faint" style={{ fontSize: 12 }}>
-                    {c.pathway ? `${c.pathway} · ` : ""}
-                    {c.blurb}
-                  </div>
-                </button>
+                />
               ))}
             </div>
           )}

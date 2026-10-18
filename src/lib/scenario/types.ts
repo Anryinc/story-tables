@@ -132,10 +132,15 @@ export type ScenarioManifest = {
 /** Playable role defined in Studio → Characters tab. */
 export type ScenarioCharacter = {
   id: string;
+  /** Роль за столом: Следователь, Провидец. */
   name: string;
+  /** Личное имя. Если пусто, на карточке игрока стоит прочерк. */
+  givenName?: string;
   blurb: string;
   portraitUrl?: string;
   portraitAssetId?: string;
+  /** Силуэт, если портрета нет. */
+  gender?: "male" | "female";
   lore?: {
     baseId: string;
     pathwayId: string;
