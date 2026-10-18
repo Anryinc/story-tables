@@ -36,6 +36,30 @@ export type PopupNotice = {
   title: string;
   body: string;
   round: number;
+  imageUrl?: string;
+};
+
+export type Memory = {
+  id: string;
+  title: string;
+  body: string;
+  imageUrl?: string;
+  source?: string;
+  round: number;
+};
+
+export type InventoryItem = {
+  id: string;
+  title: string;
+  body: string;
+  imageUrl?: string;
+};
+
+export type ActorState = {
+  id: string;
+  title: string;
+  body: string;
+  imageUrl?: string;
 };
 
 export type JournalEntry = {
@@ -75,6 +99,7 @@ export type SceneHotspot = {
   kind: "inspect" | "npc";
   inspectId?: string;
   npcId?: string;
+  talkOptions?: { id: string; label: string }[];
 };
 
 export type PartySeatView = {
@@ -104,12 +129,16 @@ export type TurnSnapshot = {
   myScene: SceneHotspot[];
   hereNpcs: { id: string; name: string; intro?: string; portraitUrl?: string }[];
   hereWith: string[];
+  company: { clientId: string; name: string }[];
   availableActions: ActionOption[];
   myIntent: ActionIntent | null;
   intentsReady: number;
   intentsNeeded: number;
   myClues: Clue[];
   myJournal: JournalEntry[];
+  myMemories: Memory[];
+  myItems: InventoryItem[];
+  myStates: ActorState[];
   shareBoard: SharePayload[];
   myPopups: PopupNotice[];
   lastResult: string | null;

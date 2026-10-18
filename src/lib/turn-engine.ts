@@ -16,8 +16,11 @@ import { MAX_PARTY } from "@/projects/roster";
 import type {
   ActionIntent,
   ActionOption,
+  ActorState,
   CharacterOption,
+  InventoryItem,
   JournalEntry,
+  Memory,
   PartySeatView,
   PopupNotice,
   SceneHotspot,
@@ -71,6 +74,10 @@ export class TurnEngine {
   private listeners = new Set<() => void>();
   private firedTimelineRounds = new Set<number>();
   private initialFlags: string[];
+  private memoriesOf = new Map<string, Memory[]>();
+  private itemsOf = new Map<string, InventoryItem[]>();
+  private statesOf = new Map<string, ActorState[]>();
+  private worldClaimed = new Set<string>();
 
   constructor(
     code: string,
@@ -206,10 +213,14 @@ export class TurnEngine {
       this.journalOf.set(s.clientId, []);
       this.inspected.set(s.clientId, new Set());
       this.talkUsed.set(s.clientId, new Set());
+      this.memoriesOf.set(s.clientId, []);
+      this.itemsOf.set(s.clientId, []);
+      this.statesOf.set(s.clientId, []);
       this.popupsOf.set(s.clientId, []);
       this.abilityCooldown.set(s.clientId, new Map());
     }
     this.flags = {};
+    this.worldClaimed.clear();
     for (const f of this.initialFlags) this.flags[f] = true;
     this.firedTimelineRounds.clear();
     this.round = 1;
@@ -225,6 +236,9 @@ export class TurnEngine {
     if (this.phase !== "planning") return { ok: false as const, error: "Нельзя" };
     const seat = this.seats.find((s) => s.clientId === clientId);
     if (!seat?.characterId) return { ok: false as const, error: "Нужна роль" };
+    if (intent.type === "inspect" || intent.type === "talk") {
+      return this.explore(clientId, intent);
+    }
     const ok = this.actionsFor(clientId).some(
       (a) => intentKey(a.intent) === intentKey(intent),
     );
@@ -240,6 +254,55 @@ export class TurnEngine {
     if (this.phase !== "planning") return;
     this.intents.delete(clientId);
     this.emit();
+  }
+
+  explore(
+    clientId: string,
+    intent: Extract<ActionIntent, { type: "inspect" }> | Extract<ActionIntent, { type: "talk" }>,
+  ) {
+    if (this.phase !== "planning") return { ok: false as const, error: "Нельзя" };
+    const seat = this.seats.find((s) => s.clientId === clientId);
+    if (!seat?.characterId) return { ok: false as const, error: "Нужна роль" };
+    if (intent.type === "inspect") this.resolveInspect(clientId, intent.targetId);
+    else this.resolveTalk(clientId, intent.npcId, intent.optionId);
+    this.emit();
+    return { ok: true as const };
+  }
+
+  shareMemory(clientId: string, memoryId: string, to: string) {
+    if (this.phase !== "planning") return { ok: false as const, error: "Нельзя" };
+    const memory = (this.memoriesOf.get(clientId) ?? []).find((m) => m.id === memoryId);
+    if (!memory) return { ok: false as const, error: "Нет такого воспоминания" };
+    const loc = this.locationOf.get(clientId);
+    if (!loc) return { ok: false as const, error: "Вы нигде" };
+    const fromName =
+      this.seats.find((s) => s.clientId === clientId)?.displayName ?? "Игрок";
+    const company = this.players().filter(
+      (s) => s.clientId !== clientId && this.locationOf.get(s.clientId) === loc,
+    );
+    const targets =
+      to === "location"
+        ? company
+        : company.filter((s) => s.clientId === to);
+    if (!targets.length) return { ok: false as const, error: "Рядом никого" };
+    for (const s of targets) {
+      this.addMemory(s.clientId, { ...memory, source: fromName });
+      this.pushPopup(
+        s.clientId,
+        "Вам передали",
+        `${fromName}: ${memory.title}`,
+        this.round,
+        memory.imageUrl,
+      );
+    }
+    this.lastResultOf.set(
+      clientId,
+      to === "location"
+        ? `Рассказали всем здесь: ${memory.title}`
+        : `Рассказали: ${memory.title}`,
+    );
+    this.emit();
+    return { ok: true as const };
   }
 
   dismissPopup(clientId: string, popupId: string) {
@@ -263,15 +326,49 @@ export class TurnEngine {
     this.cluesOf.set(clientId, [...bag, clue]);
   }
 
+  private addMemory(
+    clientId: string,
+    memory: { id: string; title: string; body: string; imageUrl?: string; source?: string },
+  ) {
+    const bag = this.memoriesOf.get(clientId) ?? [];
+    if (bag.some((m) => m.id === memory.id)) return;
+    this.memoriesOf.set(clientId, [
+      { ...memory, round: this.round },
+      ...bag,
+    ].slice(0, 80));
+  }
+
+  private addItem(clientId: string, item: InventoryItem) {
+    const bag = this.itemsOf.get(clientId) ?? [];
+    if (bag.some((i) => i.id === item.id)) return;
+    this.itemsOf.set(clientId, [...bag, item]);
+  }
+
+  private addState(clientId: string, state: ActorState) {
+    const bag = this.statesOf.get(clientId) ?? [];
+    if (bag.some((s) => s.id === state.id)) return;
+    this.statesOf.set(clientId, [...bag, state]);
+  }
+
+  private stateIds(clientId: string) {
+    return new Set((this.statesOf.get(clientId) ?? []).map((s) => s.id));
+  }
+
   private pushJournal(clientId: string, title: string, body: string) {
     const list = this.journalOf.get(clientId) ?? [];
     list.unshift({ id: newId(), round: this.round, title, body });
     this.journalOf.set(clientId, list.slice(0, 40));
   }
 
-  private pushPopup(clientId: string, title: string, body: string, round: number) {
+  private pushPopup(
+    clientId: string,
+    title: string,
+    body: string,
+    round: number,
+    imageUrl?: string,
+  ) {
     const list = this.popupsOf.get(clientId) ?? [];
-    list.push({ id: newId(), title, body, round });
+    list.push({ id: newId(), title, body, round, imageUrl });
     this.popupsOf.set(clientId, list);
   }
 
@@ -299,6 +396,13 @@ export class TurnEngine {
 
       for (const s of targets) {
         this.pushJournal(s.clientId, rule.title || `Ход ${round}`, rule.body || "");
+        this.addMemory(s.clientId, {
+          id: `tl:${rule.atRound}:${rule.title}`,
+          title: rule.title || `Ход ${round}`,
+          body: rule.body || "",
+          imageUrl: rule.grantClue?.imageUrl,
+          source: "Событие",
+        });
         if (rule.grantClue) this.addClue(s.clientId, rule.grantClue);
         this.pushPopup(
           s.clientId,
@@ -393,10 +497,22 @@ export class TurnEngine {
           }
         }
         this.pushJournal(clientId, ab.nameRu, fx.body);
+        this.addMemory(clientId, {
+          id: `ab:${abilityId}:${fx.title}`,
+          title: fx.title || ab.nameRu,
+          body: fx.body,
+          source: "Способность",
+        });
       } else if (fx.type === "set_flag") {
         this.flags[fx.flag] = true;
       } else if (fx.type === "grant_clue") {
         this.addClue(clientId, fx.clue);
+        this.addMemory(clientId, {
+          id: fx.clue.id,
+          title: fx.clue.title,
+          body: fx.clue.body,
+          source: fx.clue.source,
+        });
       } else if (fx.type === "unlock_location") {
         this.flags[`unlock_${fx.locationId}`] = true;
       }
@@ -415,19 +531,36 @@ export class TurnEngine {
     const loc = this.locationOf.get(clientId);
     if (!loc) return;
     const seen = this.inspected.get(clientId) ?? new Set();
-    const t = availableInspect(this.graph, loc, this.flags, seen).find(
-      (x) => x.id === targetId,
-    );
+    const t = availableInspect(
+      this.graph,
+      loc,
+      this.flags,
+      seen,
+      this.worldClaimed,
+      this.stateIds(clientId),
+    ).find((x) => x.id === targetId);
     if (!t) {
-      this.lastResultOf.set(clientId, "Нечего осматривать.");
+      this.lastResultOf.set(clientId, "Уже не на что смотреть.");
+      this.pushPopup(clientId, "Пусто", "Кто-то успел раньше, или это уже закрыто.", this.round);
       return;
     }
+    if (t.audience === "world") this.worldClaimed.add(t.id);
     seen.add(t.id);
     this.inspected.set(clientId, seen);
     this.setFlags(t.setFlags);
+    this.addMemory(clientId, {
+      id: t.clue?.id ?? t.id,
+      title: t.clue?.title ?? t.label,
+      body: t.result,
+      imageUrl: t.image,
+      source: t.clue?.source ?? t.label,
+    });
+    if (t.clue) this.addClue(clientId, t.clue);
+    if (t.item) this.addItem(clientId, t.item);
+    if (t.grantState) this.addState(clientId, t.grantState);
     this.pushJournal(clientId, t.label, t.result);
     this.lastResultOf.set(clientId, t.result);
-    if (t.clue) this.addClue(clientId, t.clue);
+    this.pushPopup(clientId, t.clue?.title ?? t.label, t.result, this.round, t.image ?? t.item?.imageUrl);
   }
 
   private resolveTalk(clientId: string, npcId: string, optionId: string) {
@@ -443,9 +576,25 @@ export class TurnEngine {
     used.add(`${npc.id}:${opt.id}`);
     this.talkUsed.set(clientId, used);
     this.setFlags(opt.setFlags);
+    this.addMemory(clientId, {
+      id: `${npc.id}:${opt.id}`,
+      title: `${npc.name}: ${opt.label}`,
+      body: opt.reply,
+      imageUrl: npc.portraitUrl,
+      source: npc.name,
+    });
+    if (opt.clue) {
+      this.addClue(clientId, opt.clue);
+      this.addMemory(clientId, {
+        id: opt.clue.id,
+        title: opt.clue.title,
+        body: opt.clue.body,
+        source: opt.clue.source,
+      });
+    }
     this.pushJournal(clientId, `${npc.name}: ${opt.label}`, opt.reply);
     this.lastResultOf.set(clientId, opt.reply);
-    if (opt.clue) this.addClue(clientId, opt.clue);
+    this.pushPopup(clientId, npc.name, opt.reply, this.round, npc.portraitUrl);
   }
 
   private resolveShare(clientId: string, clueId: string) {
@@ -494,33 +643,6 @@ export class TurnEngine {
         id: `move:${e.to}`,
         intent: { type: "move", toLocationId: e.to },
         label: `Идти: ${e.label}`,
-      });
-    }
-    const seen = this.inspected.get(clientId) ?? new Set();
-    for (const t of availableInspect(this.graph, loc, this.flags, seen)) {
-      opts.push({
-        id: `inspect:${t.id}`,
-        intent: { type: "inspect", targetId: t.id },
-        label: `Осмотреть: ${t.label}`,
-      });
-    }
-    const used = this.talkUsed.get(clientId) ?? new Set();
-    for (const npc of availableNpcs(this.graph, loc, this.flags)) {
-      for (const o of availableTalkOptions(npc, this.flags, used)) {
-        opts.push({
-          id: `talk:${npc.id}:${o.id}`,
-          intent: { type: "talk", npcId: npc.id, optionId: o.id },
-          label: `${npc.name}: ${o.label}`,
-          detail: npc.intro,
-        });
-      }
-    }
-    for (const c of this.cluesOf.get(clientId) ?? []) {
-      opts.push({
-        id: `share:${c.id}`,
-        intent: { type: "share", clueId: c.id },
-        label: `Показать здесь: ${c.title}`,
-        detail: "Тратит ход.",
       });
     }
 
@@ -584,6 +706,11 @@ export class TurnEngine {
         (s) => s.clientId !== clientId && this.locationOf.get(s.clientId) === loc,
       )
       .map((s) => s.displayName);
+    const company = players
+      .filter(
+        (s) => s.clientId !== clientId && this.locationOf.get(s.clientId) === loc,
+      )
+      .map((s) => ({ clientId: s.clientId, name: s.displayName }));
     const hereNpcs = loc
       ? availableNpcs(this.graph, loc, this.flags).map((n) => ({
           id: n.id,
@@ -615,6 +742,7 @@ export class TurnEngine {
       myScene: this.sceneFor(clientId, loc),
       hereNpcs,
       hereWith,
+      company,
       availableActions: this.actionsFor(clientId),
       myIntent: this.intents.get(clientId) ?? null,
       intentsReady: [...this.intents.keys()].filter((id) =>
@@ -623,6 +751,9 @@ export class TurnEngine {
       intentsNeeded: players.length,
       myClues: this.cluesOf.get(clientId) ?? [],
       myJournal: this.journalOf.get(clientId) ?? [],
+      myMemories: this.memoriesOf.get(clientId) ?? [],
+      myItems: this.itemsOf.get(clientId) ?? [],
+      myStates: this.statesOf.get(clientId) ?? [],
       shareBoard: this.visibleShares(clientId),
       myPopups: this.popupsOf.get(clientId) ?? [],
       lastResult: this.lastResultOf.get(clientId) ?? null,
@@ -636,11 +767,19 @@ export class TurnEngine {
     const pins = this.graph.locations[loc]?.scene ?? [];
     const seen = this.inspected.get(clientId) ?? new Set<string>();
     const openInspect = new Set(
-      availableInspect(this.graph, loc, this.flags, seen).map((t) => t.id),
+      availableInspect(
+        this.graph,
+        loc,
+        this.flags,
+        seen,
+        this.worldClaimed,
+        this.stateIds(clientId),
+      ).map((t) => t.id),
     );
     const openNpcs = new Set(
       availableNpcs(this.graph, loc, this.flags).map((n) => n.id),
     );
+    const used = this.talkUsed.get(clientId) ?? new Set<string>();
     const hotspots: SceneHotspot[] = [];
     for (const pin of pins) {
       const inspectId =
@@ -648,6 +787,9 @@ export class TurnEngine {
       const npcId = pin.interaction === "talk" ? pin.linkNodeId : undefined;
       if (inspectId && !openInspect.has(inspectId)) continue;
       if (npcId && !openNpcs.has(npcId)) continue;
+      const npc = npcId
+        ? availableNpcs(this.graph, loc, this.flags).find((n) => n.id === npcId)
+        : undefined;
       hotspots.push({
         id: pin.id,
         label: pin.label ?? "",
@@ -659,6 +801,12 @@ export class TurnEngine {
         kind: npcId ? "npc" : "inspect",
         inspectId,
         npcId,
+        talkOptions: npc
+          ? availableTalkOptions(npc, this.flags, used).map((o) => ({
+              id: o.id,
+              label: o.label,
+            }))
+          : undefined,
       });
     }
     return hotspots;
@@ -673,6 +821,10 @@ export class TurnEngine {
       locationOf: [...this.locationOf.entries()],
       cluesOf: [...this.cluesOf.entries()],
       journalOf: [...this.journalOf.entries()],
+      memoriesOf: [...this.memoriesOf.entries()],
+      itemsOf: [...this.itemsOf.entries()],
+      statesOf: [...this.statesOf.entries()],
+      worldClaimed: [...this.worldClaimed],
       inspected: [...this.inspected.entries()].map(([id, set]) => [id, [...set]]),
       talkUsed: [...this.talkUsed.entries()].map(([id, set]) => [id, [...set]]),
       intents: [...this.intents.entries()],
@@ -698,6 +850,10 @@ export class TurnEngine {
     this.locationOf = new Map(state.locationOf ?? []);
     this.cluesOf = new Map(state.cluesOf ?? []);
     this.journalOf = new Map(state.journalOf ?? []);
+    this.memoriesOf = new Map(state.memoriesOf ?? []);
+    this.itemsOf = new Map(state.itemsOf ?? []);
+    this.statesOf = new Map(state.statesOf ?? []);
+    this.worldClaimed = new Set(state.worldClaimed ?? []);
     this.inspected = new Map(
       (state.inspected ?? []).map(([id, ids]) => [id, new Set(ids)]),
     );
@@ -724,6 +880,10 @@ export type EngineState = {
   locationOf: [string, string][];
   cluesOf: [string, Clue[]][];
   journalOf: [string, JournalEntry[]][];
+  memoriesOf?: [string, Memory[]][];
+  itemsOf?: [string, InventoryItem[]][];
+  statesOf?: [string, ActorState[]][];
+  worldClaimed?: string[];
   inspected: [string, string[]][];
   talkUsed: [string, string[]][];
   intents: [string, ActionIntent][];

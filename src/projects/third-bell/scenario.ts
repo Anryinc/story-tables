@@ -234,6 +234,13 @@ const nodes: ScenarioNode[] = [
   }),
   inspect("ins_drawer", "Ящик", "Ящик кассы", "Под копиркой — холодный ключ с биркой «коридор».", {
     imageUrl: "/third-bell/drawer.jpg",
+    audience: "world",
+    grantItem: {
+      id: "corridor_key",
+      title: "Ключ от коридора",
+      body: "Холодный ключ с пустой биркой. Второй такой Ида не прятала.",
+      imageUrl: "/third-bell/drawer.jpg",
+    },
     requiresFlag: "mentioned_key",
     setFlags: ["staff_key"],
     grantClue: {
@@ -251,6 +258,11 @@ const nodes: ScenarioNode[] = [
     {
       requiresFlag: "spirit_vision",
       imageUrl: "/third-bell/glass.jpg",
+      grantState: {
+        id: "glass_hand",
+        title: "Чужая ладонь",
+        body: "Вы видели ладонь с той стороны стекла. Дождь её не смыл.",
+      },
       grantClue: {
         id: "glass_hand",
         title: "Ладонь на стекле",

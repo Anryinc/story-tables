@@ -1039,6 +1039,65 @@ function LocationInspector({
             />{" "}
             Один раз за игру
           </label>
+          <label className="muted" style={{ fontSize: 11, display: "block" }}>
+            Кто может
+            <select
+              value={editChild.data.audience === "world" ? "world" : "each"}
+              onChange={(e) =>
+                onUpdate(editChild.id, {
+                  data: { audience: e.target.value === "world" ? "world" : "each" },
+                })
+              }
+              style={{
+                display: "block",
+                width: "100%",
+                marginTop: 4,
+                background: "#0c0b0a",
+                border: "1px solid var(--line)",
+                borderRadius: 8,
+                padding: 8,
+                color: "var(--paper)",
+              }}
+            >
+              <option value="each">Каждый сам (часы, разговор)</option>
+              <option value="world">Один забирает у всех (вещь, проклятие)</option>
+            </select>
+          </label>
+          <Field
+            label="Предмет в инвентарь (пусто = не класть)"
+            value={editChild.data.grantItem?.title ?? ""}
+            onChange={(v) =>
+              onUpdate(editChild.id, {
+                data: {
+                  grantItem: v.trim()
+                    ? {
+                        id: editChild.data.grantItem?.id || `item_${editChild.id}`,
+                        title: v.trim(),
+                        body: editChild.data.grantItem?.body || editChild.data.inspectResult || "",
+                        imageUrl: editChild.data.imageUrl,
+                      }
+                    : undefined,
+                },
+              })
+            }
+          />
+          <Field
+            label="Состояние персонажа"
+            value={editChild.data.grantState?.title ?? ""}
+            onChange={(v) =>
+              onUpdate(editChild.id, {
+                data: {
+                  grantState: v.trim()
+                    ? {
+                        id: editChild.data.grantState?.id || `state_${editChild.id}`,
+                        title: v.trim(),
+                        body: editChild.data.grantState?.body || editChild.data.inspectResult || "",
+                      }
+                    : undefined,
+                },
+              })
+            }
+          />
           <GateFields
             value={editChild.data}
             onChange={(patch) => onUpdate(editChild.id, { data: patch })}

@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import Peer, { type DataConnection } from "peerjs";
 import { PopupModal } from "@/components/PopupModal";
 import { CharacterPickCard } from "@/components/CharacterPickCard";
-import { LocationScene } from "@/components/LocationScene";
+import { PlayConsole } from "@/components/PlayConsole";
 import { getClientId } from "@/lib/ids";
 import {
   makeHostPeerId,
@@ -14,7 +14,7 @@ import {
 import { resolvePlayable } from "@/lib/scenario/resolve";
 import { clearTable, loadTable, saveTable } from "@/lib/table-save";
 import { TurnEngine } from "@/lib/turn-engine";
-import type { ActionIntent, TurnSnapshot } from "@/lib/turn-types";
+import type { TurnSnapshot } from "@/lib/turn-types";
 import QRCode from "qrcode";
 
 export function TablePage() {
@@ -166,6 +166,9 @@ export function TablePage() {
         result = { t: "actionResult", ok: r.ok, error: r.error };
       } else if (msg.t === "intent") {
         const r = current.submitIntent(msg.clientId, msg.intent);
+        result = { t: "actionResult", ok: r.ok, error: r.error };
+      } else if (msg.t === "shareMemory") {
+        const r = current.shareMemory(msg.clientId, msg.memoryId, msg.to);
         result = { t: "actionResult", ok: r.ok, error: r.error };
       } else if (msg.t === "clearIntent") {
         current.clearIntent(msg.clientId);
@@ -372,66 +375,36 @@ export function TablePage() {
         ) : (
           <section style={{ marginTop: 20, display: "grid", gap: 12 }}>
             {room.myCharacterId ? (
-              <div className="card">
-                <p className="brass" style={{ fontSize: 11 }}>
-                  Ваш ход · {room.myLocationName}
-                </p>
-                {room.myLocationDescription ? (
-                  <p className="muted">{room.myLocationDescription}</p>
-                ) : null}
-                <LocationScene
-                  image={room.myLocationImage}
-                  hotspots={room.myScene}
-                  disabled={Boolean(room.myIntent)}
-                  onInspect={(inspectId) => {
-                    engineRef.current?.submitIntent(clientId, {
-                      type: "inspect",
-                      targetId: inspectId,
-                    });
-                    pushAll();
-                  }}
-                />
-                {room.lastResult ? (
-                  <p className="muted">{room.lastResult}</p>
-                ) : null}
-                {room.myIntent ? (
-                  <button
-                    type="button"
-                    className="btn"
-                    onClick={() => {
-                      engineRef.current?.clearIntent(clientId);
-                      pushAll();
-                    }}
-                  >
-                    Отменить ход
-                  </button>
-                ) : (
-                  <div style={{ display: "grid", gap: 8 }}>
-                    {room.availableActions.map((a) => (
-                      <button
-                        key={a.id}
-                        type="button"
-                        className="btn"
-                        style={{ height: "auto", padding: 12, textAlign: "left" }}
-                        onClick={() => {
-                          engineRef.current?.submitIntent(
-                            clientId,
-                            a.intent as ActionIntent,
-                          );
-                          pushAll();
-                        }}
-                      >
-                        <div style={{ color: "var(--paper)" }}>{a.label}</div>
-                        {a.detail ? (
-                          <div className="faint" style={{ fontSize: 11 }}>
-                            {a.detail}
-                          </div>
-                        ) : null}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              <PlayConsole
+                room={room}
+                onIntent={(intent) => {
+                  engineRef.current?.submitIntent(clientId, intent);
+                  pushAll();
+                }}
+                onInspect={(inspectId) => {
+                  engineRef.current?.submitIntent(clientId, {
+                    type: "inspect",
+                    targetId: inspectId,
+                  });
+                  pushAll();
+                }}
+                onTalk={(npcId, optionId) => {
+                  engineRef.current?.submitIntent(clientId, {
+                    type: "talk",
+                    npcId,
+                    optionId,
+                  });
+                  pushAll();
+                }}
+                onShare={(memoryId, to) => {
+                  engineRef.current?.shareMemory(clientId, memoryId, to);
+                  pushAll();
+                }}
+                onClear={() => {
+                  engineRef.current?.clearIntent(clientId);
+                  pushAll();
+                }}
+              />
             ) : (
               <p className="muted">
                 Вы ведёте стол без роли. Ходы сдают телефоны.

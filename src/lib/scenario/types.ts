@@ -82,7 +82,12 @@ export type ScenarioNodeData = {
   inspectLabel?: string;
   inspectResult?: string;
   imageUrl?: string;
+  grantItem?: { id: string; title: string; body: string; imageUrl?: string };
+  grantState?: { id: string; title: string; body: string; imageUrl?: string };
+  requiresState?: string;
   once?: boolean;
+  /** each — у каждого игрока своё; world — один забирает на всех. */
+  audience?: "each" | "world";
   npcName?: string;
   npcIntro?: string;
   /** Если задан, компилятор берёт эти реплики вместо одной «Поговорить». */

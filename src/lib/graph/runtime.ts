@@ -27,12 +27,16 @@ export function availableInspect(
   locationId: string,
   flags: Record<string, boolean>,
   seen: Set<string>,
+  worldClaimed?: Set<string>,
+  stateIds?: Set<string>,
 ): GraphInspectable[] {
   const loc = graph.locations[locationId];
   if (!loc) return [];
   return loc.inspect.filter((t) => {
     if (!gateOpen(t, flags)) return false;
-    if (t.once && seen.has(t.id)) return false;
+    if (t.requiresState && !stateIds?.has(t.requiresState)) return false;
+    if (t.audience === "world" && worldClaimed?.has(t.id)) return false;
+    if (t.once !== false && t.audience !== "world" && seen.has(t.id)) return false;
     return true;
   });
 }

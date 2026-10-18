@@ -18,9 +18,14 @@ export type GraphInspectable = FlagGate & {
   label: string;
   result: string;
   once?: boolean;
+  /** each — каждый игрок сам; world — первый забирает у всех. */
+  audience?: "each" | "world";
   setFlags?: string[];
   clue?: Clue;
   image?: string;
+  item?: { id: string; title: string; body: string; imageUrl?: string };
+  grantState?: { id: string; title: string; body: string; imageUrl?: string };
+  requiresState?: string;
 };
 
 export type GraphTalkOption = FlagGate & {

@@ -10,7 +10,7 @@ export type TimelineRule = {
   scope: "actor" | "same_location" | "all";
   scopeLocationId?: string;
   setFlags?: string[];
-  grantClue?: { id: string; title: string; body: string; source: string };
+  grantClue?: { id: string; title: string; body: string; source: string; imageUrl?: string };
   unlockLocationId?: string;
   requiresAbilityId?: string;
   requiresAbilityUsed?: string;
@@ -108,9 +108,13 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
           label: child.data.inspectLabel || child.data.title || "Осмотр",
           result: child.data.inspectResult || child.data.body || "…",
           once: child.data.once !== false,
+          audience: child.data.audience === "world" ? "world" : "each",
           setFlags: child.data.setFlags,
           clue: child.data.grantClue,
           image: child.data.imageUrl,
+          item: child.data.grantItem,
+          grantState: child.data.grantState,
+          requiresState: child.data.requiresState,
           requiresFlag: child.data.requiresFlag,
           requiresAnyFlags: child.data.requiresAnyFlags,
           hideIfFlag: child.data.hideIfFlag,

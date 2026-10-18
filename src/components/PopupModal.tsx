@@ -35,6 +35,19 @@ export function PopupModal({
         <h2 className="font-display" style={{ color: "var(--paper)", margin: "8px 0" }}>
           {popup.title}
         </h2>
+        {popup.imageUrl ? (
+          <img
+            src={popup.imageUrl}
+            alt=""
+            style={{
+              width: "100%",
+              maxHeight: 220,
+              objectFit: "cover",
+              borderRadius: 12,
+              marginBottom: 10,
+            }}
+          />
+        ) : null}
         <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
           {popup.body}
         </p>
