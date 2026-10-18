@@ -6,7 +6,7 @@ import { FloatingScene } from "@/components/FloatingScene";
 import { LoreDrawer } from "@/components/LoreDrawer";
 import { NodeCanvas } from "@/components/NodeCanvas";
 import { PreviewPanel } from "@/components/PreviewPanel";
-import { SceneStage } from "@/components/SceneStage";
+import { SceneEditor } from "@/components/SceneEditor";
 import { TimelineStrip } from "@/components/TimelineStrip";
 import {
   exportScenarioJson,
@@ -229,30 +229,12 @@ export function StudioPage() {
                   </button>
                 ))}
               </aside>
-              <div style={{ flex: 1, padding: 12, minHeight: 0 }}>
+              <div style={{ flex: 1, padding: 12, minHeight: 0, minWidth: 0 }}>
                 {sceneLoc ? (
-                  <SceneStage
-                    location={sceneLoc}
-                    onChange={(objects, background) => {
-                      onChange({
-                        ...doc,
-                        nodes: doc.nodes.map((n) =>
-                          n.id === sceneLoc.id
-                            ? {
-                                ...n,
-                                data: {
-                                  ...n.data,
-                                  sceneObjects: objects,
-                                  background:
-                                    background !== undefined
-                                      ? background
-                                      : n.data.background,
-                                },
-                              }
-                            : n,
-                        ),
-                      });
-                    }}
+                  <SceneEditor
+                    doc={doc}
+                    locationId={sceneLoc.id}
+                    onChange={onChange}
                   />
                 ) : (
                   <p className="muted">Нет локаций</p>

@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type PointerEvent as RE } from "react";
-import { SceneStage } from "./SceneStage";
-import type { ScenarioDocument, ScenarioNode, SceneObject } from "@/lib/scenario/types";
+import { SceneEditor } from "./SceneEditor";
+import type { ScenarioDocument } from "@/lib/scenario/types";
 
 export function FloatingScene({
   doc,
@@ -58,8 +58,9 @@ export function FloatingScene({
         position: "fixed",
         left: pos.x,
         top: pos.y,
-        width: 420,
-        maxHeight: "70vh",
+        width: 920,
+        maxWidth: "92vw",
+        height: "70vh",
         zIndex: 40,
         display: "flex",
         flexDirection: "column",
@@ -110,30 +111,8 @@ export function FloatingScene({
           ✕
         </button>
       </div>
-      <div style={{ padding: 8, overflow: "auto", flex: 1, minHeight: 200 }}>
-        <SceneStage
-          location={loc}
-          onChange={(objects: SceneObject[], background?: string) => {
-            onChange({
-              ...doc,
-              nodes: doc.nodes.map((n: ScenarioNode) =>
-                n.id === loc.id
-                  ? {
-                      ...n,
-                      data: {
-                        ...n.data,
-                        sceneObjects: objects,
-                        background:
-                          background !== undefined
-                            ? background
-                            : n.data.background,
-                      },
-                    }
-                  : n,
-              ),
-            });
-          }}
-        />
+      <div style={{ padding: 8, overflow: "hidden", flex: 1, minHeight: 0 }}>
+        <SceneEditor doc={doc} locationId={loc.id} onChange={onChange} />
       </div>
     </div>
   );
