@@ -130,7 +130,7 @@ export class TurnEngine {
       const abilities = ids.flatMap((id) => {
         const ability = base ? findAbility(base, id) : null;
         return ability
-          ? [{ name: ability.nameRu, description: ability.descriptionRu }]
+          ? [{ name: ability.nameRu, description: ability.descriptionRu, kind: ability.kind ?? "active" }]
           : [];
       });
       return {

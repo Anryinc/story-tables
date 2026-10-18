@@ -73,6 +73,7 @@ export type JournalEntry = {
 export type CharacterAbilityLine = {
   name: string;
   description: string;
+  kind?: "active" | "passive";
 };
 
 export type CharacterOption = {

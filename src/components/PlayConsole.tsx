@@ -213,9 +213,9 @@ export function PlayConsole({
           <h1 className="font-display" style={{ color: "var(--paper)" }}>
             Способности
           </h1>
-          {(me?.abilities ?? []).length > 0 ? (
+          {(me?.abilities ?? []).some((a) => a.kind === "passive") ? (
             <p className="faint" style={{ fontSize: 12 }}>
-              Пассивные работают сами: {me?.abilities.map((a) => a.name).join(", ")}.
+              Пассивные работают сами: {me?.abilities.filter((a) => a.kind === "passive").map((a) => a.name).join(", ")}.
             </p>
           ) : null}
           {powers.length === 0 ? (
