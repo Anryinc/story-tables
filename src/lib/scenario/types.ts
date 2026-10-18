@@ -18,6 +18,17 @@ export type ScenarioPort = {
   kind?: "move" | "flow" | "data";
 };
 
+export type SceneBackground = {
+  id: string;
+  name: string;
+  url: string;
+  assetId?: string;
+  /** Shown when this flag is set. Empty on the first, default background. */
+  requiresFlag?: string;
+  /** Shown from this round on, if the flag also matches. */
+  atRound?: number;
+};
+
 export type SceneObject = {
   id: string;
   kind: "image" | "text" | "hotspot" | "npc" | "sound";
@@ -69,6 +80,8 @@ export type ScenarioNodeData = {
   locationId?: string;
   background?: string;
   backgroundAssetId?: string;
+  /** Ordered. The first is the default; later ones replace it when their condition matches. */
+  backgrounds?: SceneBackground[];
   description?: string;
   sceneObjects?: SceneObject[];
   body?: string;

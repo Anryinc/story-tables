@@ -367,8 +367,9 @@ export function NodeCanvas({
                 <path
                   key={e.id}
                   d={`M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2} ${y2}`}
-                  stroke="#6e675c"
+                  stroke={e.requiresFlag || e.hideIfFlag ? "#c4a574" : "#6e675c"}
                   strokeWidth={2}
+                  strokeDasharray={e.requiresFlag || e.hideIfFlag ? "6 4" : undefined}
                   fill="none"
                 />
               );
@@ -416,6 +417,10 @@ export function NodeCanvas({
                   data-node
                   data-node-id={n.id}
                   onPointerDown={(e) => startNodeDrag(e, n)}
+                  onDoubleClick={(e) => {
+                    e.stopPropagation();
+                    onOpenScene?.(n.id);
+                  }}
                   style={{
                     position: "absolute",
                     left: n.x,
@@ -491,23 +496,22 @@ export function NodeCanvas({
                   </div>
 
                   <div style={{ padding: "6px 8px 8px", flex: 1 }}>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
-                      {npcs.map((c) => (
-                        <span key={c.id} style={chipNpc}>
-                          {c.data.npcName || c.data.title}
-                        </span>
-                      ))}
-                      {inspects.map((c) => (
-                        <span key={c.id} style={chipInspect}>
-                          {c.data.inspectLabel || c.data.title}
-                        </span>
-                      ))}
-                      {!npcs.length && !inspects.length ? (
-                        <span className="faint" style={{ fontSize: 10 }}>
-                          пусто · настройте справа
-                        </span>
+                    <div style={{ display: "flex", gap: 6, fontSize: 10, color: "var(--muted)" }}>
+                      <span>{inspects.length} искр</span>
+                      <span>{npcs.length} NPC</span>
+                      {(n.data.backgrounds?.length ?? 0) > 1 ? (
+                        <span>{n.data.backgrounds!.length} фона</span>
                       ) : null}
                     </div>
+                    <button
+                      type="button"
+                      className="btn"
+                      style={{ height: 26, fontSize: 11, marginTop: 6, width: "100%" }}
+                      onPointerDown={(e) => e.stopPropagation()}
+                      onClick={() => onOpenScene?.(n.id)}
+                    >
+                      Открыть сцену
+                    </button>
                   </div>
 
                   {/* ports: in left, out right — only move ports on canvas */}

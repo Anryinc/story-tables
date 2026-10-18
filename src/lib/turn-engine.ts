@@ -6,7 +6,7 @@ import {
   locationName,
 } from "./graph/runtime";
 import type { Clue, GraphDocument } from "./graph/types";
-import { gateOpen } from "./graph/types";
+import { gateOpen, pickLocationImage } from "./graph/types";
 import { newId } from "./ids";
 import { findAbility, getLoreBase } from "./lore/registry";
 import { abilityIdsForSequence, findSequence } from "./lore/types";
@@ -738,7 +738,7 @@ export class TurnEngine {
       myLocationDescription: loc
         ? (this.graph.locations[loc]?.description ?? null)
         : null,
-      myLocationImage: loc ? this.graph.locations[loc]?.image ?? null : null,
+      myLocationImage: loc ? pickLocationImage(this.graph.locations[loc], this.flags, this.round) : null,
       myScene: this.sceneFor(clientId, loc),
       hereNpcs,
       hereWith,

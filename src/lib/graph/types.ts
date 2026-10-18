@@ -57,10 +57,17 @@ export type GraphScenePin = {
   interaction?: "none" | "inspect" | "talk";
 };
 
+export type GraphBackground = {
+  url: string;
+  requiresFlag?: string;
+  atRound?: number;
+};
+
 export type GraphLocation = {
   id: string;
   name: string;
   image?: string;
+  backgrounds?: GraphBackground[];
   description?: string;
   exits: GraphExit[];
   inspect: GraphInspectable[];
@@ -73,6 +80,21 @@ export type GraphDocument = {
   startLocationId: string;
   locations: Record<string, GraphLocation>;
 };
+
+export function pickLocationImage(
+  loc: GraphLocation | undefined,
+  flags: Record<string, boolean>,
+  round: number,
+): string | null {
+  if (!loc) return null;
+  const list = loc.backgrounds ?? [];
+  const match = list.slice(1).find((b) => {
+    if (b.requiresFlag && !flags[b.requiresFlag]) return false;
+    if (b.atRound != null && round < b.atRound) return false;
+    return Boolean(b.requiresFlag || b.atRound != null);
+  });
+  return match?.url || list[0]?.url || loc.image || null;
+}
 
 export function gateOpen(gate: FlagGate, flags: Record<string, boolean>): boolean {
   if (gate.requiresFlag && !flags[gate.requiresFlag]) return false;

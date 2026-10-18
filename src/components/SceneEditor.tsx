@@ -6,6 +6,7 @@ import {
   type ScenarioEdge,
   type ScenarioNode,
   type ScenarioTalkOption,
+  type SceneBackground,
   type SceneObject,
 } from "@/lib/scenario/types";
 
@@ -29,6 +30,24 @@ const field: CSSProperties = {
   font: "inherit",
   fontSize: 12,
 };
+
+function pickStudioBackground(
+  list: SceneBackground[],
+  fallback: string | undefined,
+  flag: string,
+): string | undefined {
+  const items = list.length
+    ? list
+    : fallback
+      ? [{ id: "legacy", name: "Основной", url: fallback }]
+      : [];
+  const match = items.slice(1).find((b) => {
+    if (!flag) return false;
+    if (b.requiresFlag && b.requiresFlag !== flag) return false;
+    return Boolean(b.requiresFlag);
+  });
+  return match?.url || items[0]?.url || fallback;
+}
 
 function childrenOf(doc: ScenarioDocument, locId: string) {
   const ids = new Set<string>();
@@ -69,6 +88,7 @@ export function SceneEditor({
   const [mode, setMode] = useState<Mode>("edit");
   const [sel, setSel] = useState<Sel>({ kind: "room" });
   const [uploading, setUploading] = useState(false);
+  const [previewFlag, setPreviewFlag] = useState("");
   const stageRef = useRef<HTMLDivElement>(null);
   const drag = useRef<{ id: string; ox: number; oy: number } | null>(null);
   const resize = useRef<{ id: string; ox: number; oy: number; w: number; h: number } | null>(null);
@@ -80,6 +100,8 @@ export function SceneEditor({
   if (!loc) return <p className="muted">Нет комнаты</p>;
 
   const objects = loc.data.sceneObjects ?? [];
+  const backgrounds = loc.data.backgrounds ?? [];
+  const stageBg = pickStudioBackground(backgrounds, loc.data.background, previewFlag);
   const { inspects, npcs } = childrenOf(doc, loc.id);
   const exits = exitsOf(doc, loc.id);
   const editing = mode === "edit";
@@ -337,7 +359,17 @@ export function SceneEditor({
               type="file"
               accept="image/*"
               onChange={(e) => {
-                void uploadTo(e.target.files?.[0], (url) => patchLoc({ background: url }));
+                void uploadTo(e.target.files?.[0], (url) => {
+                  const next = [
+                    ...(loc.data.backgrounds ?? []),
+                    {
+                      id: `bg_${Math.random().toString(36).slice(2, 7)}`,
+                      name: loc.data.backgrounds?.length ? `Фон ${loc.data.backgrounds.length + 1}` : "Основной",
+                      url,
+                    },
+                  ];
+                  patchLoc({ backgrounds: next, background: next[0].url });
+                });
                 e.target.value = "";
               }}
             />
@@ -360,15 +392,15 @@ export function SceneEditor({
             borderRadius: 16,
             overflow: "hidden",
             border: "1px solid var(--line)",
-            background: loc.data.background
-              ? `#14110e center / cover no-repeat url(${loc.data.background})`
+            background: stageBg
+              ? `#14110e center / cover no-repeat url(${stageBg})`
               : "#14110e",
             cursor: tool === "spark" || tool === "npc" ? "crosshair" : "default",
           }}
         >
-          {loc.data.background ? (
+          {stageBg ? (
             <img
-              src={loc.data.background}
+              src={stageBg}
               alt=""
               draggable={false}
               style={{ width: "100%", height: "100%", objectFit: "cover", display: "block", pointerEvents: "none" }}
@@ -534,6 +566,13 @@ export function SceneEditor({
             {loc.data.title || "Комната"}
           </Row>
         </Group>
+        <Group label="Фоны">
+          {(backgrounds.length ? backgrounds : loc.data.background ? [{ id: "legacy", name: "Основной", url: loc.data.background }] : []).map((b, i) => (
+            <Row key={b.id} active={false} onClick={() => setSel({ kind: "room" })}>
+              {b.name || `Фон ${i + 1}`}{i === 0 || b.id === "legacy" ? " · основной" : b.requiresFlag ? ` · ${b.requiresFlag}` : ""}
+            </Row>
+          ))}
+        </Group>
         <Group label="Искры">
           {objects
             .filter((o) => o.interaction !== "talk" && o.kind !== "npc")
@@ -580,7 +619,14 @@ export function SceneEditor({
 
         <div style={{ marginTop: 16 }}>
           {sel.kind === "room" ? (
-            <RoomInspector loc={loc} onPatch={patchLoc} uploading={uploading} uploadTo={uploadTo} />
+            <RoomInspector
+              loc={loc}
+              onPatch={patchLoc}
+              uploading={uploading}
+              uploadTo={uploadTo}
+              previewFlag={previewFlag}
+              onPreviewFlag={setPreviewFlag}
+            />
           ) : null}
           {selectedNode?.kind === "inspect" && selectedPin ? (
             <SparkInspector
@@ -699,12 +745,36 @@ function RoomInspector({
   onPatch,
   uploading,
   uploadTo,
+  previewFlag,
+  onPreviewFlag,
 }: {
   loc: ScenarioNode;
   onPatch: (d: Partial<ScenarioNode["data"]>) => void;
   uploading: boolean;
   uploadTo: (file: File | undefined, apply: (url: string) => void) => Promise<void>;
+  previewFlag: string;
+  onPreviewFlag: (v: string) => void;
 }) {
+  const list = loc.data.backgrounds ?? [];
+  const setList = (backgrounds: SceneBackground[], background?: string) => {
+    onPatch({
+      backgrounds,
+      background: background ?? backgrounds[0]?.url ?? loc.data.background,
+    });
+  };
+  const addBg = (url: string) => {
+    const next: SceneBackground = {
+      id: `bg_${Math.random().toString(36).slice(2, 7)}`,
+      name: list.length ? `Фон ${list.length + 1}` : "Основной",
+      url,
+    };
+    const backgrounds = list.length ? [...list, next] : [{ ...next, name: "Основной" }];
+    if (!list.length && loc.data.background && loc.data.background !== url) {
+      backgrounds.unshift({ id: "bg_legacy", name: "Основной", url: loc.data.background });
+      backgrounds[1].name = "Новый";
+    }
+    setList(backgrounds);
+  };
   return (
     <div>
       <h3 style={{ color: "var(--paper)", margin: "8px 0" }}>Комната</h3>
@@ -721,23 +791,98 @@ function RoomInspector({
           style={{ ...field, resize: "vertical" }}
         />
       </label>
-      <Section title="Фон">
-        <label className="btn" style={{ height: 32, fontSize: 12, cursor: "pointer" }}>
+      <Section title="Фоны">
+        <p className="faint" style={{ fontSize: 11, margin: "0 0 6px" }}>
+          Первый — основной. Следующие сменяют его, когда флаг уже есть.
+        </p>
+        {list.map((b, i) => (
+          <div key={b.id} className="card" style={{ display: "grid", gap: 6, marginTop: 6 }}>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <img src={b.url} alt="" style={{ width: 72, height: 40, objectFit: "cover", borderRadius: 6 }} />
+              <input
+                value={b.name}
+                onChange={(e) =>
+                  setList(list.map((x) => (x.id === b.id ? { ...x, name: e.target.value } : x)))
+                }
+                style={{ ...field, marginTop: 0 }}
+              />
+            </div>
+            {i > 0 ? (
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 80px", gap: 6 }}>
+                <input
+                  value={b.requiresFlag ?? ""}
+                  placeholder="Флаг"
+                  onChange={(e) =>
+                    setList(
+                      list.map((x) =>
+                        x.id === b.id ? { ...x, requiresFlag: e.target.value.trim() || undefined } : x,
+                      ),
+                    )
+                  }
+                  style={{ ...field, marginTop: 0 }}
+                />
+                <input
+                  type="number"
+                  value={b.atRound ?? ""}
+                  placeholder="Ход"
+                  onChange={(e) =>
+                    setList(
+                      list.map((x) =>
+                        x.id === b.id
+                          ? { ...x, atRound: e.target.value ? Number(e.target.value) : undefined }
+                          : x,
+                      ),
+                    )
+                  }
+                  style={{ ...field, marginTop: 0 }}
+                />
+              </div>
+            ) : (
+              <span className="faint" style={{ fontSize: 11 }}>основной, без условия</span>
+            )}
+            <div style={{ display: "flex", gap: 6 }}>
+              {i > 0 ? (
+                <button
+                  type="button"
+                  className="btn"
+                  style={{ height: 28, fontSize: 11 }}
+                  onClick={() => {
+                    const next = [b, ...list.filter((x) => x.id !== b.id)].map((x, idx) =>
+                      idx === 0 ? { ...x, requiresFlag: undefined, atRound: undefined } : x,
+                    );
+                    setList(next, b.url);
+                  }}
+                >
+                  Сделать основным
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="btn"
+                style={{ height: 28, fontSize: 11, color: "var(--danger)" }}
+                onClick={() => setList(list.filter((x) => x.id !== b.id))}
+              >
+                Удалить
+              </button>
+            </div>
+          </div>
+        ))}
+        <label className="btn" style={{ height: 32, fontSize: 12, cursor: "pointer", marginTop: 8 }}>
           {uploading ? "Загрузка…" : "Загрузить фон"}
           <input
             hidden
             type="file"
             accept="image/*"
             onChange={(e) => {
-              void uploadTo(e.target.files?.[0], (url) => onPatch({ background: url }));
+              void uploadTo(e.target.files?.[0], addBg);
               e.target.value = "";
             }}
           />
         </label>
         <input
-          value={loc.data.background ?? ""}
-          placeholder="или ссылка"
-          onChange={(e) => onPatch({ background: e.target.value || undefined })}
+          value={previewFlag}
+          placeholder="Показать как будто флаг…"
+          onChange={(e) => onPreviewFlag(e.target.value.trim())}
           style={field}
         />
       </Section>

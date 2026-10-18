@@ -47,6 +47,11 @@ export function compileScenario(doc: ScenarioDocument): CompiledScenario {
       id,
       name: n.data.title || id,
       image: n.data.background,
+      backgrounds: (n.data.backgrounds ?? []).map((b) => ({
+        url: b.url,
+        requiresFlag: b.requiresFlag,
+        atRound: b.atRound,
+      })),
       description: n.data.description,
       exits: [],
       inspect: [],
