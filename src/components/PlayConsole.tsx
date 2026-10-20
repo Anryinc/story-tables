@@ -276,7 +276,7 @@ export function PlayConsole({
                 <div key={a.id} className="card" style={{ marginBottom: 8, padding: 10 }}>
                   <div style={{ color: "var(--paper)" }}>{a.label}</div>
                   {a.cooldownLeft ? (
-                    <div className="brass" style={{ fontSize: 12 }}>Ещё {a.cooldownLeft} {a.cooldownLeft === 1 ? "ход" : "хода"}</div>
+                    <div className="brass" style={{ fontSize: 12 }}>Ещё {a.cooldownLeft} {a.cooldownLeft % 10 === 1 && a.cooldownLeft % 100 !== 11 ? "ход" : a.cooldownLeft % 10 >= 2 && a.cooldownLeft % 10 <= 4 && (a.cooldownLeft % 100 < 12 || a.cooldownLeft % 100 > 14) ? "хода" : "ходов"}</div>
                   ) : null}
                   {a.detail ? <div className="faint" style={{ fontSize: 12 }}>{a.detail}</div> : null}
                   {a.needsTarget && !a.cooldownLeft ? (

@@ -39,7 +39,7 @@ export function availableInspect(
     if (!seesHidden && !gateOpen(t, flags)) return false;
     if (!seesHidden && t.requiresAbilityId && !openAbilities?.has(t.requiresAbilityId)) return false;
     if (t.requiresState && !stateIds?.has(t.requiresState)) return false;
-    if (t.audience === "world" && worldClaimed?.has(t.id)) return false;
+    if (worldClaimed?.has(t.id)) return false;
     const memoryId = t.clue?.id ?? t.id;
     if (heldMemoryIds?.has(memoryId)) return false;
     if (t.once !== false && t.audience !== "world" && seen.has(t.id) && !t.clue) return false;

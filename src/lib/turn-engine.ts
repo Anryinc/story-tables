@@ -29,6 +29,14 @@ import type {
   TurnSnapshot,
 } from "./turn-types";
 
+function roundsWord(n: number): string {
+  const m10 = n % 10;
+  const m100 = n % 100;
+  if (m10 === 1 && m100 !== 11) return "ход";
+  if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return "хода";
+  return "ходов";
+}
+
 function intentKey(i: ActionIntent): string {
   switch (i.type) {
     case "wait":
@@ -405,6 +413,10 @@ export class TurnEngine {
     for (const id of this.heldAbilityIds(clientId)) {
       const ab = findAbility(base, id);
       if (!ab || ab.kind !== "passive") continue;
+      if (!this.flags[`ability_used:${id}`]) {
+        this.setFlags(ab.mechanics.setsFlags);
+        this.flags[`ability_used:${id}`] = true;
+      }
       if (this.hiddenSight.get(clientId) != null) continue;
       if (ab.mechanics.effects.some((fx) => fx.type === "reveal_hidden")) {
         this.hiddenSight.set(clientId, 9999);
@@ -421,7 +433,7 @@ export class TurnEngine {
     for (const [id, bag] of this.statesOf) {
       this.statesOf.set(
         id,
-        bag.filter((s) => s.untilRound == null || s.untilRound > this.round),
+        bag.filter((s) => s.untilRound == null || s.untilRound >= this.round),
       );
     }
   }
@@ -456,7 +468,11 @@ export class TurnEngine {
 
     for (const rule of rules) {
       if (!gateOpen(rule, this.flags)) continue;
-      if (rule.requiresAbilityUsed && !this.flags[rule.requiresAbilityUsed]) continue;
+      if (rule.requiresAbilityUsed && !this.flags[rule.requiresAbilityUsed]) {
+        const abilityId = rule.requiresAbilityUsed.replace(/^ability_used:/, "");
+        const someoneHolds = this.players().some((s) => this.openAbilities(s.clientId).has(abilityId));
+        if (!someoneHolds) continue;
+      }
 
       this.setFlags(rule.setFlags);
       if (rule.unlockLocationId) {
@@ -468,6 +484,10 @@ export class TurnEngine {
         targets = targets.filter(
           (s) => this.locationOf.get(s.clientId) === rule.scopeLocationId,
         );
+      }
+      if (rule.scope === "actor" && rule.requiresAbilityUsed) {
+        const abilityId = rule.requiresAbilityUsed.replace(/^ability_used:/, "");
+        targets = targets.filter((s) => this.openAbilities(s.clientId).has(abilityId));
       }
 
       for (const s of targets) {
@@ -880,7 +900,18 @@ export class TurnEngine {
   private heldAbilityIds(clientId: string): string[] {
     const seat = this.seats.find((s) => s.clientId === clientId);
     const ch = seat?.characterId ? this.charById(seat.characterId) : null;
-    const own = ch?.lore?.enabledAbilityIds ?? [];
+    const base = getLoreBase(ch?.lore?.baseId || this.loreBaseId);
+    const own = ch?.lore
+      ? (ch.lore.enabledAbilityIds ??
+        (base
+          ? abilityIdsForSequence(
+              base,
+              ch.lore.pathwayId,
+              ch.lore.sequenceRank,
+              ch.lore.neighborPathwayId,
+            )
+          : []))
+      : [];
     const extra = (this.borrowed.get(clientId) ?? [])
       .filter((b) => b.until >= this.round)
       .map((b) => b.id);
@@ -1021,7 +1052,7 @@ export class TurnEngine {
           intent: { type: "ability", abilityId: aid },
           label: `✧ ${ab.nameRu}`,
           detail: left
-            ? `Ещё ${left} ${left === 1 ? "ход" : "хода"}. ${ab.descriptionRu}`
+            ? `Ещё ${left} ${roundsWord(left)}. ${ab.descriptionRu}`
             : ab.target && ab.target !== "none"
               ? `${ab.descriptionRu} Нужна цель.`
               : ab.descriptionRu,
@@ -1039,14 +1070,27 @@ export class TurnEngine {
       if (ab.mechanics.oncePerGame && this.flags[`ability_used:${item.abilityId}`]) continue;
       const cdMap = this.abilityCooldown.get(clientId) ?? new Map();
       const until = cdMap.get(item.abilityId);
-      if (until != null && until >= this.round) continue;
+      const left = until != null && until >= this.round ? until - this.round + 1 : 0;
       opts.push({
         id: `ability:${item.abilityId}`,
         intent: { type: "ability", abilityId: item.abilityId },
         label: `✧ ${ab.nameRu}`,
-        detail: `${item.title}. ${ab.descriptionRu}`,
-        needsTarget: ab.target && ab.target !== "none" ? ab.target : undefined,
+        detail: left ? `Ещё ${left} ${roundsWord(left)}. ${item.title}` : `${item.title}. ${ab.descriptionRu}`,
+        needsTarget: left ? undefined : ab.target && ab.target !== "none" ? ab.target : undefined,
+        cooldownLeft: left || undefined,
       });
+    }
+
+    for (const item of this.itemsOf.get(clientId) ?? []) {
+      for (const other of this.players()) {
+        if (other.clientId === clientId) continue;
+        if (this.locationOf.get(other.clientId) !== loc) continue;
+        opts.push({
+          id: `give:${item.id}:${other.clientId}`,
+          intent: { type: "give", itemId: item.id, toClientId: other.clientId },
+          label: `Отдать: ${item.title}`,
+        });
+      }
     }
 
     return opts;
@@ -1251,6 +1295,8 @@ export class TurnEngine {
       sealedExits: [...this.sealedExits.entries()],
       hiddenSight: [...this.hiddenSight.entries()],
       backgroundShift: [...this.backgroundShift.entries()],
+      usedAbilities: [...this.usedAbilities.entries()].map(([id, set]) => [id, [...set]]),
+      firedPresence: [...this.firedPresence.entries()].map(([id, set]) => [id, [...set]]),
     };
   }
 
@@ -1289,6 +1335,12 @@ export class TurnEngine {
     this.sealedExits = new Map(state.sealedExits ?? []);
     this.hiddenSight = new Map(state.hiddenSight ?? []);
     this.backgroundShift = new Map(state.backgroundShift ?? []);
+    this.usedAbilities = new Map(
+      (state.usedAbilities ?? []).map(([id, ids]) => [id, new Set(ids)]),
+    );
+    this.firedPresence = new Map(
+      (state.firedPresence ?? []).map(([id, ids]) => [id, new Set(ids)]),
+    );
   }
 }
 
@@ -1319,4 +1371,6 @@ export type EngineState = {
   sealedExits?: [string, number][];
   hiddenSight?: [string, number][];
   backgroundShift?: [string, number][];
+  usedAbilities?: [string, string[]][];
+  firedPresence?: [string, string[]][];
 };
