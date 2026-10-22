@@ -84,6 +84,19 @@ const nodes: ScenarioNode[] = [
     "Уголь, лопата, пустые мешки. Тупик. Никакой кабинки и никакого святого.",
     "/cadmon/shed.jpg"),
 
+  loc("loc_lych", "Калитка кладбища", 40, 480, "lych",
+    "Низкая железная калитка в ограде прихода. За ней камни, не площадь. Фонарь с паперти сюда почти не достаёт.",
+    "/cadmon/lych.jpg"),
+  loc("loc_graveyard", "Кладбище Одели", 40, 720, "graveyard",
+    "Ночные могилы прихода. Кривые плиты, мокрая трава. Имени Кадмона на камнях нет: имена местные и старые.",
+    "/cadmon/graveyard.jpg"),
+  loc("loc_salt", "Могила Сольта", 240, 960, "salt",
+    "Камень простой, относительно свежий. В банке те же цветы, что у Анны на столе. Кадмона здесь нет.",
+    "/cadmon/salt.jpg"),
+  loc("loc_north", "Северная стена", 40, 960, "northwall",
+    "Тупик. Плющ, осыпавшаяся кладка. На кусте тёмно-красная тряпка. Это не занавесь и не вход.",
+    "/cadmon/northwall.jpg"),
+
   loc("loc_anna", "Дом Анны Сольт", 520, 120, "anna",
     "Тесная кухня. Цветы в банке, чай, фото мужа. Анна смотрит в сторону церкви, когда говорит о Боге.",
     "/cadmon/anna.jpg"),
@@ -210,6 +223,21 @@ const nodes: ScenarioNode[] = [
     inspectResult: "Плат не ночного кроя. Под ним флакон и остаток, который не кость святого. Пахнет внушаемостью, не ладаном. Упаковать без имени Кадмона.",
     once: true,
   }),
+  node("ins_stones", "inspect", "Плиты", 160, 720, {
+    inspectLabel: "Искать имя Кадмона",
+    inspectResult: "Плиты стёрты солью и дождём. Читаются местные фамилии и Одель в поминальных формулах. Кадмона нет. Кадмана тоже нет.",
+    once: true,
+  }),
+  node("ins_salt", "inspect", "Банка с цветами", 360, 960, {
+    inspectLabel: "Посмотреть могилу Сольта",
+    inspectResult: "Имя мужа Анны, дата трёхлетней давности. Цветы в банке свежие, те же, что на её столе. К кабинке это не ведёт.",
+    once: true,
+  }),
+  node("ins_ribbon", "inspect", "Тряпка на кусте", 160, 960, {
+    inspectLabel: "Снять тряпку",
+    inspectResult: "Крашеная шерсть, мокрая, с репьями. Не занавесь. За стеной огород и чужой забор, хода нет.",
+    once: true,
+  }),
 ];
 
 const edges: ScenarioEdge[] = [
@@ -219,6 +247,16 @@ const edges: ScenarioEdge[] = [
   edge("loc_square", "loc_porch", "out", "in", "На паперть"),
   edge("loc_porch", "loc_nave", "out", "in", "В неф"),
   edge("loc_nave", "loc_porch", "out", "in", "На паперть"),
+  edge("loc_porch", "loc_lych", "out", "in", "К калитке"),
+  edge("loc_lych", "loc_porch", "out", "in", "На паперть"),
+  edge("loc_lych", "loc_graveyard", "out", "in", "На кладбище"),
+  edge("loc_graveyard", "loc_lych", "out", "in", "К калитке"),
+  edge("loc_alley", "loc_graveyard", "out", "in", "Вдоль стены"),
+  edge("loc_graveyard", "loc_alley", "out", "in", "В переулок"),
+  edge("loc_graveyard", "loc_salt", "out", "in", "К могиле Сольта"),
+  edge("loc_salt", "loc_graveyard", "out", "in", "На кладбище"),
+  edge("loc_graveyard", "loc_north", "out", "in", "К северной стене"),
+  edge("loc_north", "loc_graveyard", "out", "in", "Назад"),
 
   edge("loc_square", "loc_nave", "out", "in", "В церковь"),
   edge("loc_nave", "loc_square", "out", "in", "На площадь"),
@@ -268,6 +306,9 @@ const edges: ScenarioEdge[] = [
   edge("loc_constable", "ins_protocol", "events", "in"),
   edge("loc_penn", "npc_penn", "events", "in"),
   edge("loc_booth", "ins_vial", "events", "in"),
+  edge("loc_graveyard", "ins_stones", "events", "in"),
+  edge("loc_salt", "ins_salt", "events", "in"),
+  edge("loc_north", "ins_ribbon", "events", "in"),
 ];
 
 export const cadmonScenario: ScenarioDocument = {
@@ -281,8 +322,8 @@ export const cadmonScenario: ScenarioDocument = {
     playersMin: 1,
     playersMax: 4,
     status: "draft",
-    version: "0.1.1",
-    updatedAt: "2026-10-22T20:15:00.000Z",
+    version: "0.1.2",
+    updatedAt: "2026-10-22T21:00:00.000Z",
   },
   loreBaseId: "lotm",
   nodes,
