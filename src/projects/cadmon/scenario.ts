@@ -55,15 +55,30 @@ function pin(
   };
 }
 
+function spark(id: string, label: string, x: number, y: number, linkNodeId: string): SceneObject {
+  return {
+    id,
+    kind: "hotspot",
+    label,
+    x,
+    y,
+    w: 10,
+    h: 14,
+    linkNodeId,
+    interaction: "inspect",
+    percent: true,
+  };
+}
+
 function node(
   id: string,
   kind: ScenarioNode["kind"],
   title: string,
   x: number,
   y: number,
-  data: ScenarioNode["data"],
+  data: Omit<ScenarioNode["data"], "title">,
 ): ScenarioNode {
-  return { id, kind, x, y, ports: ports(kind), data: { title, ...data } };
+  return { id, kind, x, y, ports: ports(kind), data: { ...data, title } };
 }
 
 function edge(
@@ -84,7 +99,8 @@ const nodes: ScenarioNode[] = [
     "Ночь. Дверь прихода святой Одели. Фонарь, скамейка, объявление о пропавшей кошке. Здесь встречают.",
     "/cadmon/porch.jpg",
     undefined,
-    [pin("pin_voss", "Восс", "/cadmon/portraits/voss.png", 58, 20, 20, 74, "npc_voss")]),
+    [pin("pin_voss", "Восс", "/cadmon/portraits/voss.png", 58, 20, 20, 74, "npc_voss"),
+      spark("sp_door", "Дверь", 36, 48, "ins_door")]),
   loc("loc_square", "Площадь Соляного хода", 520, 340, "square",
     "Рабочая площадь. Закрытая лавка, пустая телега, доска объявлений: кошка, таблица приливов. Отсюда расходятся улицы.",
     "/cadmon/square.jpg"),
@@ -97,12 +113,17 @@ const nodes: ScenarioNode[] = [
       { id: "bg_nave_sealed", name: "Снова голая стена", url: "/cadmon/nave.jpg", requiresFlag: "sealed" },
       { id: "bg_nave_booth", name: "Исповедальня появилась", url: "/cadmon/nave-booth.jpg", requiresFlag: "room_real" },
     ],
-    [pin("pin_piel", "Пил", "/cadmon/portraits/piel.png", 70, 28, 16, 68, "npc_piel")]),
+    [pin("pin_piel", "Пил", "/cadmon/portraits/piel.png", 70, 28, 16, 68, "npc_piel"),
+      spark("sp_wall", "Стена", 22, 42, "ins_wall"),
+      spark("sp_pew", "Скамья", 46, 72, "ins_pew"),
+      spark("sp_speak", "Балка", 30, 58, "ins_speak"),
+      spark("sp_seal", "Печать", 40, 48, "ins_seal")]),
   loc("loc_vestry", "Ризница", 300, 720, "vestry",
     "Облачения, свечи, журнал расхода масла. На аналое книга усопших.",
     "/cadmon/vestry.jpg",
     undefined,
-    [pin("pin_elvin", "Элвин", "/cadmon/portraits/elvin.png", 64, 14, 18, 80, "npc_elvin")]),
+    [pin("pin_elvin", "Элвин", "/cadmon/portraits/elvin.png", 64, 14, 18, 80, "npc_elvin"),
+      spark("sp_book", "Книга", 38, 64, "ins_book")]),
   loc("loc_choir", "Хор", 520, 780, "choir",
     "Пустой хор. Пыль на перилах. Колокола нет и не было. Сюда приходят его искать.",
     "/cadmon/choir.jpg"),
@@ -111,7 +132,9 @@ const nodes: ScenarioNode[] = [
     "/cadmon/crypt.jpg"),
   loc("loc_alley", "Переулок за церковью", 760, 560, "alley",
     "Узко, пахнет солью и мокрым камнем. На стене надпись мелом и ножом.",
-    "/cadmon/alley.jpg"),
+    "/cadmon/alley.jpg",
+    undefined,
+    [spark("sp_graffiti", "Надпись", 48, 46, "ins_graffiti")]),
   loc("loc_shed", "Угольный сарай", 980, 560, "shed",
     "Уголь, лопата, пустые мешки. Тупик. Никакой кабинки и никакого святого.",
     "/cadmon/shed.jpg"),
@@ -121,13 +144,19 @@ const nodes: ScenarioNode[] = [
     "/cadmon/lych.jpg"),
   loc("loc_graveyard", "Кладбище Одели", 40, 720, "graveyard",
     "Ночные могилы прихода. Кривые плиты, мокрая трава. Имени Кадмона на камнях нет: имена местные и старые.",
-    "/cadmon/graveyard.jpg"),
+    "/cadmon/graveyard.jpg",
+    undefined,
+    [spark("sp_stones", "Плиты", 42, 62, "ins_stones")]),
   loc("loc_salt", "Могила Сольта", 240, 960, "salt",
     "Камень простой, относительно свежий. В банке те же цветы, что у Анны на столе. Кадмона здесь нет.",
-    "/cadmon/salt.jpg"),
+    "/cadmon/salt.jpg",
+    undefined,
+    [spark("sp_salt", "Цветы", 50, 66, "ins_salt")]),
   loc("loc_north", "Северная стена", 40, 960, "northwall",
     "Тупик. Плющ, осыпавшаяся кладка. На кусте тёмно-красная тряпка. Это не занавесь и не вход.",
-    "/cadmon/northwall.jpg"),
+    "/cadmon/northwall.jpg",
+    undefined,
+    [spark("sp_ribbon", "Тряпка", 54, 48, "ins_ribbon")]),
 
   loc("loc_anna", "Дом Анны Сольт", 520, 120, "anna",
     "Тесная комната. Цветы в банке, чай, фото мужа. Анна смотрит в сторону церкви, когда говорит о Боге.",
@@ -136,7 +165,9 @@ const nodes: ScenarioNode[] = [
     [pin("pin_anna", "Анна", "/cadmon/portraits/anna.png", 6, 18, 22, 76, "npc_anna")]),
   loc("loc_school", "Школа", 780, 340, "school",
     "Класс пустой. Парты, чернильница, доска с обычными упражнениями. На одной парте детская записка.",
-    "/cadmon/school.jpg"),
+    "/cadmon/school.jpg",
+    undefined,
+    [spark("sp_note", "Записка", 44, 62, "ins_note")]),
   loc("loc_yard", "Двор с бельём", 1000, 340, "yard",
     "Верёвки, простыни. Одна на миг похожа на тёмно-красную занавесь. Это бельё.",
     "/cadmon/yard.jpg"),
@@ -144,7 +175,8 @@ const nodes: ScenarioNode[] = [
     "Лампа, график дежурств, кружка. На столе протокол о человеке, который «проспался в кабинке».",
     "/cadmon/constable.jpg",
     undefined,
-    [pin("pin_block", "Блок", "/cadmon/portraits/block.png", 4, 12, 22, 82, "npc_block")]),
+    [pin("pin_block", "Блок", "/cadmon/portraits/block.png", 4, 12, 22, 82, "npc_block"),
+      spark("sp_protocol", "Протокол", 58, 58, "ins_protocol")]),
   loc("loc_cell", "Вторая камера", 40, 120, "cell",
     "Пустая камера. Нары, ведро, храп из соседней. Тупик.",
     "/cadmon/cell.jpg"),
@@ -155,11 +187,18 @@ const nodes: ScenarioNode[] = [
     [pin("pin_penn", "Пенн", "/cadmon/portraits/penn.png", 58, 18, 30, 76, "npc_penn")]),
   loc("loc_lodging", "Постоялый двор", 1000, 120, "lodging",
     "Комната Восса. Скучная нарочно: журнал, остывший чай, обещанные бумаги переписи. Обвинять его здесь рано — ночь портится.",
-    "/cadmon/lodging.jpg"),
+    "/cadmon/lodging.jpg",
+    undefined,
+    [spark("sp_folder", "Папка", 46, 60, "item_folder")]),
 
   loc("loc_booth", "Исповедальня", 760, 780, "booth",
     "Тесная кабинка. Тёмно-красная занавесь, решётка, скамья. В углу плат не ночного кроя и флакон. Этой комнаты не было, пока её не собрали.",
-    "/cadmon/booth.jpg"),
+    "/cadmon/booth.jpg",
+    undefined,
+    [
+      spark("sp_vial_look", "Угол", 34, 70, "ins_vial"),
+      spark("sp_vial_take", "Флакон", 62, 74, "item_vial"),
+    ]),
 
   node("npc_voss", "npc", "Каспар Восс", 260, 180, {
     npcName: "Каспар Восс",
@@ -587,7 +626,7 @@ const edges: ScenarioEdge[] = [
   edge("loc_anna", "loc_penn", "out", "in", "К соседке"),
   edge("loc_penn", "loc_anna", "out", "in", "К Анне"),
 
-  edge("loc_nave", "loc_booth", "out", "in", "В исповедальню", { requiresFlag: "room_real" }),
+  edge("loc_nave", "loc_booth", "out", "in", "В исповедальню", { requiresFlag: "room_real", hideIfFlag: "sealed" }),
   edge("loc_booth", "loc_nave", "out", "in", "В неф"),
 
   edge("loc_porch", "npc_voss", "events", "in"),
@@ -626,8 +665,8 @@ export const cadmonScenario: ScenarioDocument = {
     playersMin: 1,
     playersMax: 4,
     status: "draft",
-    version: "0.2.0",
-    updatedAt: "2026-10-22T21:15:00.000Z",
+    version: "0.2.1",
+    updatedAt: "2026-10-22T21:20:00.000Z",
   },
   loreBaseId: "lotm",
   nodes,
@@ -732,7 +771,7 @@ export const cadmonScenario: ScenarioDocument = {
     },
     {
       id: "tm_wall",
-      atRound: 10,
+      atRound: 12,
       title: "Стена уступает",
       body: "Если место под балкой ещё не назвали вслух, кладка всё равно уступает. Кабинка стоит, пока флакон не закрыт.",
       scope: "all",
