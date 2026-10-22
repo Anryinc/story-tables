@@ -184,6 +184,8 @@ export type ScenarioCharacter = {
   gender?: "male" | "female";
   /** Где этот персонаж начинает. Пусто — общая стартовая локация. */
   startLocationId?: string;
+  /** Личное, ещё до улик. В начале дела кладётся в воспоминания. */
+  memories?: { id: string; title: string; body: string; source?: string }[];
   lore?: {
     baseId: string;
     pathwayId: string;

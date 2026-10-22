@@ -246,6 +246,17 @@ export class TurnEngine {
     for (const f of this.initialFlags) this.flags[f] = true;
     this.firedTimelineRounds.clear();
     this.round = 1;
+    for (const s of players) {
+      const ch = s.characterId ? this.charById(s.characterId) : null;
+      for (const mem of ch?.memories ?? []) {
+        this.addMemory(s.clientId, {
+          id: mem.id,
+          title: mem.title,
+          body: mem.body,
+          source: mem.source ?? "Своё",
+        });
+      }
+    }
     this.phase = "planning";
     this.intents.clear();
     this.lastPublicEvent = "Дело открыто.";
