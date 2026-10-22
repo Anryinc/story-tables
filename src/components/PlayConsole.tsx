@@ -474,25 +474,40 @@ export function PlayConsole({
             alignItems: "flex-end",
             justifyContent: "center",
           }}
+          onClick={() => setNpc(null)}
         >
-          <div className="card" style={{ width: "min(440px, 100%)", borderRadius: "18px 18px 0 0" }}>
-            <p className="brass" style={{ fontSize: 11 }}>{npc.label}</p>
-            {npc.pathway ? <p className="faint" style={{ fontSize: 12, margin: 0 }}>{npc.pathway}</p> : null}
-            {npc.image ? (
-              <img
-                src={npc.image}
-                alt=""
-                style={{
-                  width: 140,
-                  height: 220,
-                  objectFit: "contain",
-                  objectPosition: "center bottom",
-                  display: "block",
-                  background: "transparent",
-                }}
-              />
-            ) : null}
-            {(npc.talkOptions ?? []).length === 0 ? (
+          <div
+            className="card dlg-sheet"
+            style={{ width: "min(520px, 100%)", borderRadius: "18px 18px 0 0", margin: 0 }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
+              {npc.image ? (
+                <img
+                  src={npc.image}
+                  alt=""
+                  className="npc-idle"
+                  style={{
+                    width: 108,
+                    height: 180,
+                    objectFit: "contain",
+                    objectPosition: "center bottom",
+                    flex: "0 0 auto",
+                    animationDuration: "3.4s",
+                  }}
+                />
+              ) : null}
+              <div style={{ minWidth: 0, flex: 1, paddingBottom: 8 }}>
+                <p className="brass" style={{ fontSize: 11, margin: 0 }}>{npc.label}</p>
+                {npc.pathway ? <p className="faint" style={{ fontSize: 12, margin: "2px 0 0" }}>{npc.pathway}</p> : null}
+                <p className="dlg-line" style={{ color: "var(--paper)", margin: "8px 0 0", lineHeight: 1.4 }}>
+                  {npc.intro || "Молчит и ждёт."}
+                </p>
+              </div>
+            </div>
+            {room.myIntent ? (
+              <p className="muted" style={{ fontSize: 13 }}>Ход уже сдан. Реплику можно выбрать в следующем раунде.</p>
+            ) : (npc.talkOptions ?? []).length === 0 ? (
               <p className="muted">Больше нечего сказать.</p>
             ) : (
               (npc.talkOptions ?? []).map((o) => (
@@ -513,7 +528,7 @@ export function PlayConsole({
               ))
             )}
             <button type="button" className="btn" style={{ width: "100%", marginTop: 8 }} onClick={() => setNpc(null)}>
-              Закрыть
+              Отойти
             </button>
           </div>
         </div>

@@ -465,9 +465,10 @@ export class TurnEngine {
     body: string,
     round: number,
     imageUrl?: string,
+    kind?: "talk",
   ) {
     const list = this.popupsOf.get(clientId) ?? [];
-    list.push({ id: newId(), title, body, round, imageUrl });
+    list.push({ id: newId(), title, body, round, imageUrl, kind });
     this.popupsOf.set(clientId, list);
   }
 
@@ -872,7 +873,7 @@ export class TurnEngine {
     }
     this.pushJournal(clientId, `${npc.name}: ${opt.label}`, opt.reply);
     this.lastResultOf.set(clientId, opt.reply);
-    this.pushPopup(clientId, npc.name, opt.reply, this.round, npc.portraitUrl);
+    this.pushPopup(clientId, npc.name, opt.reply, this.round, npc.portraitUrl, "talk");
     if (opt.usesAbilityId) this.resolveAbility(clientId, opt.usesAbilityId, undefined, true);
     this.fireReactions(clientId, "talk");
   }
@@ -1262,6 +1263,7 @@ export class TurnEngine {
         kind: npcId ? "npc" : "inspect",
         inspectId,
         npcId,
+        intro: npc?.intro,
         talkOptions: npc
           ? availableTalkOptions(npc, this.flags, used).map((o) => ({
               id: o.id,

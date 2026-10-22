@@ -41,6 +41,8 @@ export type PopupNotice = {
   body: string;
   round: number;
   imageUrl?: string;
+  /** talk — ответ неписи, рисуется как реплика, не как карточка. */
+  kind?: "talk";
 };
 
 export type Memory = {
@@ -115,6 +117,7 @@ export type SceneHotspot = {
   kind: "inspect" | "npc";
   inspectId?: string;
   npcId?: string;
+  intro?: string;
   talkOptions?: { id: string; label: string; veracity?: "truth" | "lie" }[];
   pathway?: string;
 };
