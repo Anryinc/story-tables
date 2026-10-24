@@ -34,6 +34,25 @@ export function saveScenario(doc: ScenarioDocument) {
   writeAll(map);
 }
 
+const HIDDEN_KEY = "story-tables.hidden.v1";
+
+export function hiddenScenarioIds(): string[] {
+  try {
+    const raw = localStorage.getItem(HIDDEN_KEY);
+    if (!raw) return [];
+    const list = JSON.parse(raw) as unknown;
+    return Array.isArray(list) ? list.filter((id) => typeof id === "string") : [];
+  } catch {
+    return [];
+  }
+}
+
+export function hideScenario(id: string) {
+  const ids = new Set(hiddenScenarioIds());
+  ids.add(id);
+  localStorage.setItem(HIDDEN_KEY, JSON.stringify([...ids]));
+}
+
 export function deleteScenario(id: string) {
   const map = readAll();
   delete map[id];

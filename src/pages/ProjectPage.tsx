@@ -87,15 +87,6 @@ export function ProjectPage() {
         >
           Открыть стол на этом ПК
         </button>
-        {stored ? (
-          <Link
-            to={`/studio/${projectId}`}
-            className="btn"
-            style={{ marginTop: 10, width: "100%" }}
-          >
-            Редактировать в мастерской
-          </Link>
-        ) : null}
       </div>
     </main>
   );
