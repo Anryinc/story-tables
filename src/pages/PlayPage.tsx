@@ -6,6 +6,7 @@ import { CharacterPickCard } from "@/components/CharacterPickCard";
 import { PlayConsole } from "@/components/PlayConsole";
 import { getClientId } from "@/lib/ids";
 import { openGuestPeer, type GuestMsg } from "@/lib/p2p";
+import { openGuestRelay } from "@/lib/relay";
 import type { TurnSnapshot } from "@/lib/turn-types";
 
 export function PlayPage() {
@@ -46,10 +47,11 @@ export function PlayPage() {
     let cancelled = false;
     connectedRef.current = false;
     setError(null);
-    setStatus("Подключение к PeerJS…");
+    setStatus("Подключение к столу…");
 
-    const { destroy, whenReady } = openGuestPeer(
+    const relay = openGuestRelay(
       hostPeerId,
+      clientId,
       (msg) => {
         if (msg.t === "snapshot") setRoom(msg.room);
         if (msg.t === "actionResult" && !msg.ok)
@@ -61,20 +63,47 @@ export function PlayPage() {
       },
     );
 
-    whenReady
-      .then((conn) => {
+    let peerDestroy: (() => void) | null = null;
+    const hello = { t: "hello", clientId, displayName: "Игрок" } as const;
+
+    relay.whenReady
+      .then(() => {
         if (cancelled) return;
-        connRef.current = conn;
+        connRef.current = {
+          open: true,
+          send: (msg: GuestMsg) => relay.send(msg),
+        } as unknown as DataConnection;
         connectedRef.current = true;
         setStatus("Связь есть");
-        conn.send({
-          t: "hello",
-          clientId,
-          displayName: "Игрок",
-        } satisfies GuestMsg);
+        relay.send(hello);
       })
-      .catch((e) => {
-        if (!cancelled) setError(String(e?.type || e?.message || e));
+      .catch(() => {
+        if (cancelled) return;
+        setStatus("Релей недоступен, пробую PeerJS…");
+        const { destroy, whenReady } = openGuestPeer(
+          hostPeerId,
+          (msg) => {
+            if (msg.t === "snapshot") setRoom(msg.room);
+            if (msg.t === "actionResult" && !msg.ok)
+              setActionError(msg.error ?? "Ошибка");
+            if (msg.t === "actionResult" && msg.ok) setActionError(null);
+          },
+          (s) => {
+            if (!cancelled) setStatus(s);
+          },
+        );
+        peerDestroy = destroy;
+        whenReady
+          .then((conn) => {
+            if (cancelled) return;
+            connRef.current = conn;
+            connectedRef.current = true;
+            setStatus("Связь есть");
+            conn.send(hello);
+          })
+          .catch((e) => {
+            if (!cancelled) setError(String(e?.type || e?.message || e));
+          });
       });
 
     const hang = window.setTimeout(() => {
@@ -90,7 +119,8 @@ export function PlayPage() {
     return () => {
       cancelled = true;
       window.clearTimeout(hang);
-      destroy();
+      relay.close();
+      peerDestroy?.();
       connRef.current = null;
     };
   }, [code, clientId, hostPeerId, retryKey]);

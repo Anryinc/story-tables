@@ -12,6 +12,7 @@ import {
   type HostMsg,
 } from "@/lib/p2p";
 import { resolvePlayable } from "@/lib/scenario/resolve";
+import { openHostRelay, type RelayConn } from "@/lib/relay";
 import { clearTable, loadTable, saveTable } from "@/lib/table-save";
 import { TurnEngine } from "@/lib/turn-engine";
 import type { TurnSnapshot } from "@/lib/turn-types";
@@ -28,7 +29,7 @@ export function TablePage() {
   const pack = useMemo(() => resolvePlayable(projectId), [projectId]);
   const engineRef = useRef<TurnEngine | null>(null);
   const peerIdRef = useRef<string | null>(null);
-  const connsRef = useRef<Map<string, DataConnection>>(new Map());
+  const connsRef = useRef<Map<string, DataConnection | RelayConn>>(new Map());
   const [room, setRoom] = useState<TurnSnapshot | null>(null);
   const [hostPeerId, setHostPeerId] = useState<string | null>(null);
   const [peerReady, setPeerReady] = useState(false);
@@ -102,6 +103,7 @@ export function TablePage() {
 
     let destroyed = false;
     let peer: Peer | null = null;
+    let relayClose: (() => void) | null = null;
     let retries = 0;
 
     const boot = (peerId: string) => {
@@ -110,44 +112,43 @@ export function TablePage() {
       } catch {
         /* */
       }
+      try {
+        relayClose?.();
+      } catch {
+        /* */
+      }
       peerIdRef.current = peerId;
       setHostPeerId(peerId);
       setPeerReady(false);
-      peer = openHostPeer(
+      relayClose = openHostRelay(
         peerId,
         (conn, msg) => handleGuest(conn, msg),
-        (id) => {
+        () => {
           if (destroyed) return;
-          peerIdRef.current = id;
           setPeerReady(true);
-          setHostPeerId(id);
           persist();
         },
         (e) => {
           if (destroyed) return;
-          const text = String(e);
-          if (text.includes("unavailable-id") && retries < 1) {
-            retries += 1;
-            setErr("Прежний канал занят. На телефонах нужен новый QR.");
-            boot(makeHostPeerId(code));
-            return;
-          }
-          // A second phone failing ICE must not kill the host or change the QR.
-          if (text.includes("network") || text.includes("socket") || text.includes("server")) {
-            setErr(null);
-            try {
-              peer?.reconnect();
-            } catch {
-              /* */
-            }
-            return;
-          }
-          setErr(`PeerJS: ${text}`);
+          setErr(`Релей: ${e}. Пробую PeerJS…`);
+          peer = openHostPeer(
+            peerId,
+            (conn, msg) => handleGuest(conn, msg),
+            () => {
+              if (destroyed) return;
+              setPeerReady(true);
+              setErr(null);
+              persist();
+            },
+            (pe) => {
+              if (!destroyed) setErr(`PeerJS: ${pe}`);
+            },
+          );
         },
-      );
+      ).close;
     };
 
-    function handleGuest(conn: DataConnection, msg: GuestMsg) {
+    function handleGuest(conn: DataConnection | RelayConn, msg: GuestMsg) {
       const current = engineRef.current;
       if (!current) return;
 
@@ -220,6 +221,11 @@ export function TablePage() {
       destroyed = true;
       unsub();
       try {
+        relayClose?.();
+      } catch {
+        /* */
+      }
+      try {
         peer?.destroy();
       } catch {
         /* */
@@ -291,7 +297,7 @@ export function TablePage() {
         >
           <div>
             <p className="brass" style={{ fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase" }}>
-              Хаб · {peerReady ? "сигнал online" : "ждём PeerJS…"} · гостей:{" "}
+              Хаб · {peerReady ? "сигнал online" : "ждём релей…"} · гостей:{" "}
               {guestCount}
             </p>
             <h1 className="font-display" style={{ margin: "4px 0", color: "var(--paper)" }}>
@@ -339,7 +345,7 @@ export function TablePage() {
               }}
             >
               <p className="muted" style={{ margin: 0, fontSize: 12, lineHeight: 1.4 }}>
-                {err ? "Канал не поднялся. Обновите стол." : "Ждём сигнал PeerJS…"}
+                {err ? "Канал не поднялся. Обновите стол." : "Ждём релей…"}
               </p>
             </div>
           )}
