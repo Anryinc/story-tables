@@ -2,11 +2,13 @@ import type { SceneHotspot } from "@/lib/turn-types";
 
 export function LocationScene({
   image,
+  title,
   hotspots,
   onInspect,
   onTalk,
 }: {
   image?: string | null;
+  title?: string | null;
   hotspots?: SceneHotspot[];
   onInspect: (inspectId: string) => void;
   onTalk: (pin: SceneHotspot) => void;
@@ -31,6 +33,25 @@ export function LocationScene({
           alt=""
           style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
         />
+      ) : null}
+      {title ? (
+        <div
+          style={{
+            position: "absolute",
+            top: 0,
+            left: 0,
+            right: 0,
+            padding: "10px 14px 28px",
+            background: "linear-gradient(to bottom, rgba(8,7,6,0.86), rgba(8,7,6,0))",
+            color: "var(--paper)",
+            fontFamily: '"Cormorant Garamond", Georgia, serif',
+            fontSize: 28,
+            lineHeight: 1.1,
+            pointerEvents: "none",
+          }}
+        >
+          {title}
+        </div>
       ) : null}
       {pins.map((pin, index) => {
         if (pin.kind === "npc") {

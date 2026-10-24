@@ -80,9 +80,6 @@ export function PlayConsole({
           <p className="brass" style={{ fontSize: 10, letterSpacing: "0.18em", textTransform: "uppercase" }}>
             Раунд {room.round} · ходы {room.intentsReady}/{room.intentsNeeded}
           </p>
-          <h1 className="font-display" style={{ margin: "4px 0", color: "var(--paper)", fontSize: 28 }}>
-            {room.myLocationName}
-          </h1>
           {room.company.length > 0 ? (
             <div style={{ display: "flex", justifyContent: "flex-end", gap: 6, marginBottom: 8 }}>
               {room.company.map((p) => (
@@ -112,6 +109,7 @@ export function PlayConsole({
           ) : null}
           <LocationScene
             image={room.myLocationImage}
+            title={room.myLocationName}
             hotspots={room.myScene}
             onInspect={onInspect}
             onTalk={setNpc}

@@ -594,7 +594,54 @@ export class TurnEngine {
       if (loc) this.firePresences(s.clientId, loc, "round");
       this.firePassives(s.clientId);
     }
+    this.narrateEnding();
     this.emit();
+  }
+
+  /** Не объявляет исход. Описывает, чем ночь кончилась, один раз. */
+  private narrateEnding() {
+    if (this.endingSent) return;
+    const party = this.players();
+    if (!party.length) return;
+    if (this.flags.sealed) {
+      this.endingSent = true;
+      let pulled = false;
+      for (const s of party) {
+        if (this.locationOf.get(s.clientId) === "booth") {
+          this.locationOf.set(s.clientId, "nave");
+          pulled = true;
+        }
+      }
+      const body = pulled
+        ? "Пробка села без имени. Занавесь осела в кладку, и тех, кто ещё стоял внутри, вынесло на камень нефа. Утром приход снова молится Одели. Чужое спокойствие остаётся в голове, но спрашивать уже некому."
+        : "Пробка села без имени. Занавесь осела в голую кладку, кабинки больше нет. Утром приход молится Одели. Чужое спокойствие остаётся в голове, но спрашивать уже некому.";
+      for (const s of party) {
+        this.pushPopup(s.clientId, "Голая кладка", body, this.round);
+        this.addMemory(s.clientId, {
+          id: "ending_wall",
+          title: "Голая кладка",
+          body,
+          source: "Ночь",
+        });
+      }
+      return;
+    }
+    if (party.length < 2) return;
+    if (!this.flags.room_real) return;
+    if (!party.every((s) => this.locationOf.get(s.clientId) === "booth")) return;
+    this.endingSent = true;
+    this.flags.kept = true;
+    const body =
+      "Вы все по одну сторону решётки. Фразу, которую не сказали живому человеку, комната договаривает сама. Выход больше не находится. Утром вы здороваетесь с теми, кого встречали только здесь.";
+    for (const s of party) {
+      this.pushPopup(s.clientId, "Решётка", body, this.round);
+      this.addMemory(s.clientId, {
+        id: "ending_grille",
+        title: "Решётка",
+        body,
+        source: "Ночь",
+      });
+    }
   }
 
   private resolveAbility(clientId: string, abilityId: string, targetLabel?: string, asNpc = false, targetId?: string) {
@@ -931,6 +978,7 @@ export class TurnEngine {
   }
 
   private firedPresence = new Map<string, Set<string>>();
+  private endingSent = false;
 
   private fireReactions(actorId: string, trigger: "inspect" | "talk" | "enter" | "ability") {
     const loc = this.locationOf.get(actorId);
@@ -1310,6 +1358,7 @@ export class TurnEngine {
       backgroundShift: [...this.backgroundShift.entries()],
       usedAbilities: [...this.usedAbilities.entries()].map(([id, set]) => [id, [...set]]),
       firedPresence: [...this.firedPresence.entries()].map(([id, set]) => [id, [...set]]),
+      endingSent: this.endingSent,
     };
   }
 
@@ -1354,6 +1403,7 @@ export class TurnEngine {
     this.firedPresence = new Map(
       (state.firedPresence ?? []).map(([id, ids]) => [id, new Set(ids)]),
     );
+    this.endingSent = Boolean(state.endingSent);
   }
 }
 
@@ -1386,4 +1436,5 @@ export type EngineState = {
   backgroundShift?: [string, number][];
   usedAbilities?: [string, string[]][];
   firedPresence?: [string, string[]][];
+  endingSent?: boolean;
 };
