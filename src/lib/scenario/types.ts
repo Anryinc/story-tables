@@ -176,6 +176,8 @@ export type ScenarioCharacter = {
   /** Личное имя. Если пусто, на карточке игрока стоит прочерк. */
   givenName?: string;
   blurb: string;
+  /** Полный брифинг на старте: кто вы, как оказались здесь, что делать. Если пусто — берётся blurb. */
+  briefing?: string;
   /** Как выглядит. Показывается рядом стоящим по клику на портрет. */
   appearance?: string;
   portraitUrl?: string;

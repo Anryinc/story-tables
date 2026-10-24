@@ -256,15 +256,15 @@ export class TurnEngine {
           source: mem.source ?? "Своё",
         });
       }
-      const back = ch?.blurb?.trim();
+      const back = (ch?.briefing ?? ch?.blurb)?.trim();
       if (back) {
         this.addMemory(s.clientId, {
           id: `backstory:${ch?.id ?? s.clientId}`,
-          title: "Предыстория",
+          title: "Задание",
           body: back,
           source: "Своё",
         });
-        this.pushPopup(s.clientId, "Предыстория", back, 1, ch?.portraitUrl);
+        this.pushPopup(s.clientId, "Задание", back, 1, ch?.portraitUrl);
       }
     }
     this.phase = "planning";
