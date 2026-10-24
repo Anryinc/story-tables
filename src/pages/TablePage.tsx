@@ -133,6 +133,17 @@ export function TablePage() {
             return;
           }
           setErr(`PeerJS: ${text}`);
+          if (
+            (text.includes("network") || text.includes("socket") || text.includes("server")) &&
+            retries < 3
+          ) {
+            retries += 1;
+            window.setTimeout(() => {
+              if (destroyed) return;
+              setErr(null);
+              boot(makeHostPeerId(code));
+            }, 2000);
+          }
         },
       );
     };

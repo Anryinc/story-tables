@@ -34,7 +34,7 @@ export function CharacterPortrait({
         width: "100%",
         height: "100%",
         objectFit: "cover",
-        objectPosition: "center 18%",
+        objectPosition: "center 12%",
         display: "block",
       }}
     />
@@ -110,7 +110,7 @@ export function CharacterPickCard({
       <div
         style={{
           position: "relative",
-          height: 168,
+          height: 280,
           overflow: "hidden",
           background: "#14110e",
         }}

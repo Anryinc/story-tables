@@ -16,30 +16,13 @@ export type HostMsg =
   | { t: "snapshot"; room: TurnSnapshot }
   | { t: "actionResult"; ok: boolean; error?: string };
 
-/** Keep PeerJS defaults (includes their TURN) and add extra STUN so mobile ICE has more candidates. */
+/** Pure PeerJS defaults. Custom ICE was dropping the broker socket. */
 const PEER_OPTS = {
   debug: 1 as const,
   host: "0.peerjs.com",
   port: 443,
   path: "/",
   secure: true,
-  config: {
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:stun1.l.google.com:19302" },
-      { urls: "stun:stun2.l.google.com:19302" },
-      { urls: "stun:global.stun.twilio.com:3478" },
-      {
-        urls: [
-          "turn:eu-0.turn.peerjs.com:3478",
-          "turn:us-0.turn.peerjs.com:3478",
-        ],
-        username: "peerjs",
-        credential: "peerjsp",
-      },
-    ],
-    sdpSemantics: "unified-plan" as const,
-  },
 };
 
 const CONNECT_OPTS = { serialization: "json" as const };
@@ -58,6 +41,14 @@ export function openHostPeer(
   const peer = new Peer(peerId, PEER_OPTS);
   peer.on("open", (id) => onReady?.(id));
   peer.on("error", (err) => onError?.(String(err.type || err.message || err)));
+  peer.on("disconnected", () => {
+    if (peer.destroyed) return;
+    try {
+      peer.reconnect();
+    } catch {
+      /* */
+    }
+  });
   peer.on("connection", (conn) => {
     const handle = (raw: unknown) => {
       const msg = raw as GuestMsg;
@@ -65,7 +56,7 @@ export function openHostPeer(
     };
     conn.on("data", handle);
     conn.on("open", () => {
-      /* channel ready; data may already be buffered */
+      /* channel ready */
     });
   });
   return peer;
@@ -100,9 +91,7 @@ export function openGuestPeer(
         } catch {
           /* */
         }
-        if (attempt < 4) {
-          window.setTimeout(tryConnect, 1500);
-        }
+        if (attempt < 4) window.setTimeout(tryConnect, 1500);
       }, 12000);
       conn.on("open", () => {
         if (settled) return;
@@ -136,7 +125,11 @@ export function openGuestPeer(
         }, 2000);
         return;
       }
-      if (err.type === "network" || err.type === "server-error" || err.type === "socket-error") {
+      if (
+        err.type === "network" ||
+        err.type === "server-error" ||
+        err.type === "socket-error"
+      ) {
         onStatus?.("Брокер не отвечает, повтор…");
         window.setTimeout(() => {
           if (!settled && peer.open) tryConnect();
