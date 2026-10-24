@@ -502,10 +502,12 @@ export function PlayConsole({
             className="card dlg-sheet"
             style={{
               width: "min(560px, 100%)",
+              maxHeight: "88dvh",
               borderRadius: "18px 18px 0 0",
               margin: 0,
               padding: 14,
-              display: "grid",
+              display: "flex",
+              flexDirection: "column",
               gap: 12,
             }}
             onClick={(e) => e.stopPropagation()}
@@ -574,7 +576,7 @@ export function PlayConsole({
                 ) : null}
               </div>
             </div>
-            <div style={{ display: "grid", gap: 8 }}>
+            <div style={{ display: "grid", gap: 8, overflowY: "auto", minHeight: 0, flex: "1 1 auto" }}>
               {(liveNpc.talkOptions ?? []).map((o) => (
                 <button
                   key={o.id}
@@ -597,15 +599,15 @@ export function PlayConsole({
               {(liveNpc.talkOptions ?? []).length === 0 && !awaiting ? (
                 <p className="muted" style={{ margin: 0, fontSize: 13 }}>Больше нечего сказать.</p>
               ) : null}
-              <button
-                type="button"
-                className="btn btn-primary"
-                style={{ width: "100%" }}
-                onClick={() => setNpc(null)}
-              >
-                Закончить диалог
-              </button>
             </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ width: "100%", flex: "0 0 auto" }}
+              onClick={() => setNpc(null)}
+            >
+              Закончить диалог
+            </button>
           </div>
         </div>
       ) : null}

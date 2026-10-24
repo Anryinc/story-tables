@@ -68,6 +68,9 @@ export function PopupModal({
         style={{
           maxWidth: 360,
           width: "100%",
+          maxHeight: "min(78dvh, 640px)",
+          display: "flex",
+          flexDirection: "column",
           borderColor: "var(--brass)",
           background: "#141210",
         }}
@@ -84,20 +87,23 @@ export function PopupModal({
             alt=""
             style={{
               width: "100%",
-              maxHeight: 220,
+              maxHeight: 160,
               objectFit: "cover",
               borderRadius: 12,
               marginBottom: 10,
+              flex: "0 0 auto",
             }}
           />
         ) : null}
-        <p className="muted" style={{ whiteSpace: "pre-wrap" }}>
-          {popup.body}
-        </p>
+        <div style={{ overflowY: "auto", minHeight: 0, flex: "1 1 auto", paddingRight: 4 }}>
+          <p className="muted" style={{ whiteSpace: "pre-wrap", margin: 0 }}>
+            {popup.body}
+          </p>
+        </div>
         <button
           type="button"
           className="btn btn-primary"
-          style={{ width: "100%", marginTop: 16 }}
+          style={{ width: "100%", marginTop: 16, flex: "0 0 auto" }}
           onClick={onDismiss}
         >
           Понятно
