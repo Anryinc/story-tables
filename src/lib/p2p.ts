@@ -80,8 +80,11 @@ export function openHostPeer(
       if (msg && typeof msg === "object" && "t" in msg) onGuest(conn, msg);
     };
     conn.on("data", handle);
-    conn.on("open", () => {
-      /* channel ready; hello may already be buffered */
+    conn.on("error", () => {
+      /* one guest failing must not take the table down */
+    });
+    conn.on("close", () => {
+      /* guest left; host map is cleaned when they next hello */
     });
   });
   return peer;
@@ -91,8 +94,8 @@ export function openGuestPeer(
   hostPeerId: string,
   onHost: (msg: HostMsg) => void,
   onStatus?: (s: string) => void,
-): { peer: Peer; whenReady: Promise<DataConnection> } {
-  const peer = new Peer(PEER_OPTS);
+): { destroy: () => void; whenReady: Promise<DataConnection> } {
+  let peer = new Peer(PEER_OPTS);
   const whenReady = new Promise<DataConnection>((resolve, reject) => {
     let settled = false;
     let attempt = 0;
@@ -100,6 +103,44 @@ export function openGuestPeer(
       if (settled) return;
       settled = true;
       reject(e);
+    };
+    const wire = (p: Peer) => {
+      p.on("open", () => {
+        onStatus?.(`Peer id ${p.id}`);
+        tryConnect();
+      });
+      p.on("error", (err) => {
+        onStatus?.(`Peer error: ${err.type}`);
+        if (settled) return;
+        if (err.type === "peer-unavailable") {
+          onStatus?.("Хост ещё не в сети, повтор через 2с…");
+          window.setTimeout(() => {
+            if (!settled && p.open) tryConnect();
+          }, 2000);
+          return;
+        }
+        if (
+          err.type === "network" ||
+          err.type === "server-error" ||
+          err.type === "socket-error" ||
+          err.type === "disconnected"
+        ) {
+          onStatus?.("Брокер не отвечает, новый канал…");
+          window.setTimeout(freshPeer, 1500);
+          return;
+        }
+        fail(err);
+      });
+    };
+    const freshPeer = () => {
+      if (settled) return;
+      try {
+        peer.destroy();
+      } catch {
+        /* */
+      }
+      peer = new Peer(PEER_OPTS);
+      wire(peer);
     };
     const tryConnect = () => {
       if (settled || !peer.open) return;
@@ -116,8 +157,9 @@ export function openGuestPeer(
         } catch {
           /* */
         }
-        if (attempt < 5) window.setTimeout(tryConnect, 1200);
-      }, 15000);
+        if (attempt < 6) window.setTimeout(freshPeer, 1000);
+        else fail(new Error("timeout"));
+      }, 12000);
       conn.on("open", () => {
         if (settled) return;
         settled = true;
@@ -129,40 +171,23 @@ export function openGuestPeer(
         const msg = raw as HostMsg;
         if (msg && typeof msg === "object" && "t" in msg) onHost(msg);
       });
-      conn.on("error", (e) => {
-        onStatus?.(`Ошибка канала: ${String(e)}`);
-        if (!settled && attempt < 5) {
-          window.clearTimeout(t);
-          window.setTimeout(tryConnect, 1200);
-        }
+      conn.on("error", () => {
+        if (settled) return;
+        onStatus?.("Канал не открылся, повтор…");
+        window.clearTimeout(t);
+        if (attempt < 6) window.setTimeout(freshPeer, 1000);
       });
     };
-    peer.on("open", () => {
-      onStatus?.(`Peer id ${peer.id}`);
-      tryConnect();
-    });
-    peer.on("error", (err) => {
-      onStatus?.(`Peer error: ${err.type}`);
-      if (err.type === "peer-unavailable") {
-        onStatus?.("Хост ещё не в сети, повтор через 2с…");
-        window.setTimeout(() => {
-          if (!settled && peer.open) tryConnect();
-        }, 2000);
-        return;
-      }
-      if (
-        err.type === "network" ||
-        err.type === "server-error" ||
-        err.type === "socket-error"
-      ) {
-        onStatus?.("Брокер не отвечает, повтор…");
-        window.setTimeout(() => {
-          if (!settled && peer.open) tryConnect();
-        }, 2500);
-        return;
-      }
-      fail(err);
-    });
+    wire(peer);
   });
-  return { peer, whenReady };
+  return {
+    destroy: () => {
+      try {
+        peer.destroy();
+      } catch {
+        /* */
+      }
+    },
+    whenReady,
+  };
 }

@@ -132,18 +132,17 @@ export function TablePage() {
             boot(makeHostPeerId(code));
             return;
           }
-          setErr(`PeerJS: ${text}`);
-          if (
-            (text.includes("network") || text.includes("socket") || text.includes("server")) &&
-            retries < 3
-          ) {
-            retries += 1;
-            window.setTimeout(() => {
-              if (destroyed) return;
-              setErr(null);
-              boot(makeHostPeerId(code));
-            }, 2000);
+          // A second phone failing ICE must not kill the host or change the QR.
+          if (text.includes("network") || text.includes("socket") || text.includes("server")) {
+            setErr(null);
+            try {
+              peer?.reconnect();
+            } catch {
+              /* */
+            }
+            return;
           }
+          setErr(`PeerJS: ${text}`);
         },
       );
     };
@@ -153,7 +152,21 @@ export function TablePage() {
       if (!current) return;
 
       if (msg.t === "hello") {
+        const prev = connsRef.current.get(msg.clientId);
+        if (prev && prev !== conn) {
+          try {
+            prev.close();
+          } catch {
+            /* */
+          }
+        }
         connsRef.current.set(msg.clientId, conn);
+        conn.on("close", () => {
+          if (connsRef.current.get(msg.clientId) === conn) {
+            connsRef.current.delete(msg.clientId);
+            setGuestCount(connsRef.current.size);
+          }
+        });
         setGuestCount(connsRef.current.size);
         current.ensureSeat(msg.clientId, msg.displayName);
         try {

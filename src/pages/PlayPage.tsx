@@ -48,7 +48,7 @@ export function PlayPage() {
     setError(null);
     setStatus("Подключение к PeerJS…");
 
-    const { peer, whenReady } = openGuestPeer(
+    const { destroy, whenReady } = openGuestPeer(
       hostPeerId,
       (msg) => {
         if (msg.t === "snapshot") setRoom(msg.room);
@@ -90,7 +90,7 @@ export function PlayPage() {
     return () => {
       cancelled = true;
       window.clearTimeout(hang);
-      peer.destroy();
+      destroy();
       connRef.current = null;
     };
   }, [code, clientId, hostPeerId, retryKey]);
