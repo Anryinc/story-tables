@@ -256,6 +256,16 @@ export class TurnEngine {
           source: mem.source ?? "Своё",
         });
       }
+      const back = ch?.blurb?.trim();
+      if (back) {
+        this.addMemory(s.clientId, {
+          id: `backstory:${ch?.id ?? s.clientId}`,
+          title: "Предыстория",
+          body: back,
+          source: "Своё",
+        });
+        this.pushPopup(s.clientId, "Предыстория", back, 1, ch?.portraitUrl);
+      }
     }
     this.phase = "planning";
     this.intents.clear();
@@ -920,7 +930,6 @@ export class TurnEngine {
     }
     this.pushJournal(clientId, `${npc.name}: ${opt.label}`, opt.reply);
     this.lastResultOf.set(clientId, opt.reply);
-    this.pushPopup(clientId, npc.name, opt.reply, this.round, npc.portraitUrl, "talk");
     if (opt.usesAbilityId) this.resolveAbility(clientId, opt.usesAbilityId, undefined, true);
     this.fireReactions(clientId, "talk");
   }

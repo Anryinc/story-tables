@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { LocationScene } from "@/components/LocationScene";
 import type { ActionIntent, SceneHotspot, TurnSnapshot } from "@/lib/turn-types";
 
@@ -44,6 +44,9 @@ export function PlayConsole({
 }) {
   const [tab, setTab] = useState<Tab>("scene");
   const [npc, setNpc] = useState<SceneHotspot | null>(null);
+  const [chat, setChat] = useState<{ from: "npc" | "me"; text: string }[]>([]);
+  const [awaiting, setAwaiting] = useState(false);
+  const seenResult = useRef<string | null>(null);
   const [shareId, setShareId] = useState<string | null>(null);
   const [aim, setAim] = useState<string | null>(null);
   const [giveId, setGiveId] = useState<string | null>(null);
@@ -56,6 +59,27 @@ export function PlayConsole({
 
   const travel = moves.filter((a) => a.intent.type === "move");
   const hold = moves.find((a) => a.intent.type === "wait");
+
+  const liveNpc = npc
+    ? room.myScene.find((p) => p.id === npc.id && p.kind === "npc") ?? npc
+    : null;
+
+  useEffect(() => {
+    if (!liveNpc) return;
+    if (!awaiting) return;
+    const reply = room.lastResult;
+    if (!reply || reply === seenResult.current) return;
+    seenResult.current = reply;
+    setChat((prev) => [...prev, { from: "npc", text: reply }]);
+    setAwaiting(false);
+  }, [room.lastResult, awaiting, liveNpc]);
+
+  const openNpc = (pin: SceneHotspot) => {
+    setNpc(pin);
+    setChat([{ from: "npc", text: pin.intro || "Молчит и ждёт." }]);
+    setAwaiting(false);
+    seenResult.current = room.lastResult;
+  };
 
   return (
     <div
@@ -112,7 +136,7 @@ export function PlayConsole({
             title={room.myLocationName}
             hotspots={room.myScene}
             onInspect={onInspect}
-            onTalk={setNpc}
+            onTalk={openNpc}
           />
           {room.myLocationDescription ? (
             <p className="muted" style={{ fontSize: 14, lineHeight: 1.45 }}>
@@ -461,7 +485,7 @@ export function PlayConsole({
         </div>
       ) : null}
 
-      {npc ? (
+      {liveNpc ? (
         <div
           style={{
             position: "fixed",
@@ -476,56 +500,112 @@ export function PlayConsole({
         >
           <div
             className="card dlg-sheet"
-            style={{ width: "min(520px, 100%)", borderRadius: "18px 18px 0 0", margin: 0 }}
+            style={{
+              width: "min(560px, 100%)",
+              borderRadius: "18px 18px 0 0",
+              margin: 0,
+              padding: 14,
+              display: "grid",
+              gap: 12,
+            }}
             onClick={(e) => e.stopPropagation()}
           >
-            <div style={{ display: "flex", gap: 12, alignItems: "flex-end" }}>
-              {npc.image ? (
-                <img
-                  src={npc.image}
-                  alt=""
+            <div style={{ display: "flex", gap: 12, alignItems: "stretch", minHeight: 168 }}>
+              {liveNpc.image ? (
+                <div
                   style={{
                     width: 108,
-                    height: 180,
-                    objectFit: "contain",
-                    objectPosition: "center bottom",
+                    height: 168,
                     flex: "0 0 auto",
+                    overflow: "hidden",
+                    borderRadius: 12,
+                    background: "#14110e",
                   }}
-                />
+                >
+                  <img
+                    src={liveNpc.image}
+                    alt=""
+                    style={{
+                      width: "100%",
+                      height: "286%",
+                      objectFit: "cover",
+                      objectPosition: "center top",
+                      display: "block",
+                    }}
+                  />
+                </div>
               ) : null}
-              <div style={{ minWidth: 0, flex: 1, paddingBottom: 8 }}>
-                <p className="brass" style={{ fontSize: 11, margin: 0 }}>{npc.label}</p>
-                {npc.pathway ? <p className="faint" style={{ fontSize: 12, margin: "2px 0 0" }}>{npc.pathway}</p> : null}
-                <p className="dlg-line" style={{ color: "var(--paper)", margin: "8px 0 0", lineHeight: 1.4 }}>
-                  {npc.intro || "Молчит и ждёт."}
+              <div
+                style={{
+                  minWidth: 0,
+                  flex: 1,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 8,
+                  maxHeight: 220,
+                  overflowY: "auto",
+                  paddingRight: 2,
+                }}
+              >
+                <p className="brass" style={{ fontSize: 11, margin: 0 }}>
+                  {liveNpc.label}
+                  {liveNpc.pathway ? <span className="faint"> · {liveNpc.pathway}</span> : null}
                 </p>
+                {chat.map((line, i) => (
+                  <div
+                    key={i}
+                    style={{
+                      alignSelf: line.from === "me" ? "flex-end" : "flex-start",
+                      maxWidth: "92%",
+                      padding: "8px 10px",
+                      borderRadius: line.from === "me" ? "12px 12px 4px 12px" : "12px 12px 12px 4px",
+                      background: line.from === "me" ? "#2a241c" : "#1a1814",
+                      color: "var(--paper)",
+                      fontSize: 14,
+                      lineHeight: 1.4,
+                      whiteSpace: "pre-wrap",
+                    }}
+                  >
+                    {line.text}
+                  </div>
+                ))}
+                {awaiting ? (
+                  <p className="faint" style={{ margin: 0, fontSize: 12 }}>…</p>
+                ) : null}
               </div>
             </div>
-            {room.myIntent ? (
-              <p className="muted" style={{ fontSize: 13 }}>Ход уже сдан. Реплику можно выбрать в следующем раунде.</p>
-            ) : (npc.talkOptions ?? []).length === 0 ? (
-              <p className="muted">Больше нечего сказать.</p>
-            ) : (
-              (npc.talkOptions ?? []).map((o) => (
+            <div style={{ display: "grid", gap: 8 }}>
+              {(liveNpc.talkOptions ?? []).map((o) => (
                 <button
                   key={o.id}
                   type="button"
                   className="btn"
-                  style={{ width: "100%", marginTop: 8, height: "auto", padding: 12, textAlign: "left" }}
+                  disabled={awaiting}
+                  style={{ width: "100%", height: "auto", padding: 12, textAlign: "left" }}
                   onClick={() => {
-                    if (npc.npcId) onTalk(npc.npcId, o.id);
-                    setNpc(null);
+                    if (!liveNpc.npcId || awaiting) return;
+                    setChat((prev) => [...prev, { from: "me", text: o.label }]);
+                    setAwaiting(true);
+                    onTalk(liveNpc.npcId, o.id);
                   }}
                 >
                   {o.label}
                   {o.veracity === "truth" ? <span className="brass"> · правда</span> : null}
                   {o.veracity === "lie" ? <span style={{ color: "var(--danger)" }}> · ложь</span> : null}
                 </button>
-              ))
-            )}
-            <button type="button" className="btn" style={{ width: "100%", marginTop: 8 }} onClick={() => setNpc(null)}>
-              Отойти
-            </button>
+              ))}
+              {(liveNpc.talkOptions ?? []).length === 0 && !awaiting ? (
+                <p className="muted" style={{ margin: 0, fontSize: 13 }}>Больше нечего сказать.</p>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn-primary"
+                style={{ width: "100%" }}
+                onClick={() => setNpc(null)}
+              >
+                Закончить диалог
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

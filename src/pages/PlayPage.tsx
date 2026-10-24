@@ -202,7 +202,7 @@ export function PlayPage() {
             send({ t: "intent", clientId, intent: { type: "inspect", targetId: inspectId } })
           }
           onTalk={(npcId, optionId) =>
-            send({ t: "intent", clientId, intent: { type: "talk", npcId, optionId } })
+            send({ t: "talk", clientId, npcId, optionId })
           }
           onShare={(memoryId, to) => send({ t: "shareMemory", clientId, memoryId, to })}
           onClear={() => send({ t: "clearIntent", clientId })}

@@ -8,6 +8,7 @@ export type GuestMsg =
   | { t: "claim"; clientId: string; characterId: string | null }
   | { t: "start"; clientId: string }
   | { t: "intent"; clientId: string; intent: ActionIntent }
+  | { t: "talk"; clientId: string; npcId: string; optionId: string }
   | { t: "shareMemory"; clientId: string; memoryId: string; to: string }
   | { t: "clearIntent"; clientId: string }
   | { t: "dismissPopup"; clientId: string; popupId: string };

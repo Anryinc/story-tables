@@ -175,6 +175,13 @@ export function TablePage() {
       } else if (msg.t === "start") {
         const r = current.start(msg.clientId);
         result = { t: "actionResult", ok: r.ok, error: r.error };
+      } else if (msg.t === "talk") {
+        const r = current.explore(msg.clientId, {
+          type: "talk",
+          npcId: msg.npcId,
+          optionId: msg.optionId,
+        });
+        result = { t: "actionResult", ok: r.ok, error: r.error };
       } else if (msg.t === "intent") {
         const r = current.submitIntent(msg.clientId, msg.intent);
         result = { t: "actionResult", ok: r.ok, error: r.error };
@@ -432,7 +439,7 @@ export function TablePage() {
                   pushAll();
                 }}
                 onTalk={(npcId, optionId) => {
-                  engineRef.current?.submitIntent(clientId, {
+                  engineRef.current?.explore(clientId, {
                     type: "talk",
                     npcId,
                     optionId,
