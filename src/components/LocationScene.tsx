@@ -53,7 +53,7 @@ export function LocationScene({
           {title}
         </div>
       ) : null}
-      {pins.map((pin) => {
+      {pins.map((pin, index) => {
         if (pin.kind === "npc") {
           return (
             <button
@@ -115,7 +115,10 @@ export function LocationScene({
               cursor: "pointer",
             }}
           >
-            <span className="spark" />
+            <span
+              className="spark"
+              style={{ animationDelay: `${(index % 7) * 0.28}s` }}
+            />
           </button>
         );
       })}
