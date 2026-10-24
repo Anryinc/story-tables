@@ -200,14 +200,18 @@ export function TablePage() {
   }, [code, clientId, pack]);
 
   useEffect(() => {
-    if (!hostPeerId || !code) return;
+    if (!peerReady || !hostPeerId || !code) {
+      setQr("");
+      return;
+    }
     const playUrl = `${window.location.origin}/play/${code.toUpperCase()}?h=${encodeURIComponent(hostPeerId)}`;
     void QRCode.toDataURL(playUrl, {
-      width: 220,
-      margin: 1,
-      color: { dark: "#e8e2d6", light: "#0c0b0a" },
+      width: 280,
+      margin: 2,
+      errorCorrectionLevel: "M",
+      color: { dark: "#111111", light: "#ffffff" },
     }).then(setQr);
-  }, [hostPeerId, code]);
+  }, [peerReady, hostPeerId, code]);
 
   if (!pack) {
     return (
@@ -229,8 +233,9 @@ export function TablePage() {
   const topPopup = room.myPopups?.[0] ?? null;
   const roles = room.characterOptions ?? [];
   const playUrl =
-    hostPeerId &&
-    `${typeof window !== "undefined" ? window.location.origin : ""}/play/${code.toUpperCase()}?h=${hostPeerId}`;
+    peerReady && hostPeerId
+      ? `${typeof window !== "undefined" ? window.location.origin : ""}/play/${code.toUpperCase()}?h=${encodeURIComponent(hostPeerId)}`
+      : "";
 
   return (
     <>

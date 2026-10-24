@@ -22,12 +22,6 @@ const PEER_OPTS = {
   port: 443,
   path: "/",
   secure: true,
-  config: {
-    iceServers: [
-      { urls: "stun:stun.l.google.com:19302" },
-      { urls: "stun:global.stun.twilio.com:3478" },
-    ],
-  },
 };
 
 export function makeHostPeerId(code: string) {
@@ -68,7 +62,7 @@ export function openGuestPeer(
     };
     const tryConnect = () => {
       onStatus?.(`Подключаюсь к хосту…`);
-      const conn = peer.connect(hostPeerId, { reliable: true });
+      const conn = peer.connect(hostPeerId, { serialization: "json" });
       const t = window.setTimeout(() => {
         if (!settled) {
           onStatus?.("Таймаут канала, повтор…");
@@ -77,7 +71,7 @@ export function openGuestPeer(
           } catch {
             /* */
           }
-          const conn2 = peer.connect(hostPeerId, { reliable: true });
+          const conn2 = peer.connect(hostPeerId, { serialization: "json" });
           wire(conn2);
         }
       }, 8000);
