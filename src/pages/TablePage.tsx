@@ -200,7 +200,7 @@ export function TablePage() {
   }, [code, clientId, pack]);
 
   useEffect(() => {
-    if (!peerReady || !hostPeerId || !code) {
+    if (!hostPeerId || !code) {
       setQr("");
       return;
     }
@@ -211,7 +211,7 @@ export function TablePage() {
       errorCorrectionLevel: "M",
       color: { dark: "#111111", light: "#ffffff" },
     }).then(setQr);
-  }, [peerReady, hostPeerId, code]);
+  }, [hostPeerId, code]);
 
   if (!pack) {
     return (
@@ -281,10 +281,37 @@ export function TablePage() {
             ) : null}
           </div>
           {qr ? (
-            <div className="card" style={{ textAlign: "center" }}>
-              <img src={qr} alt="QR" width={180} height={180} />
+            <div className="card" style={{ textAlign: "center", padding: 10, position: "relative" }}>
+              <img
+                src={qr}
+                alt="QR"
+                width={180}
+                height={180}
+                style={{ display: "block", opacity: peerReady ? 1 : 0.35 }}
+              />
+              {!peerReady ? (
+                <p className="muted" style={{ margin: "6px 0 0", fontSize: 11 }}>
+                  {err ? "Канал не поднялся" : "Ждём сигнал…"}
+                </p>
+              ) : null}
             </div>
-          ) : null}
+          ) : (
+            <div
+              className="card"
+              style={{
+                width: 200,
+                height: 200,
+                display: "grid",
+                placeItems: "center",
+                textAlign: "center",
+                padding: 12,
+              }}
+            >
+              <p className="muted" style={{ margin: 0, fontSize: 12, lineHeight: 1.4 }}>
+                Собираем QR…
+              </p>
+            </div>
+          )}
         </header>
 
         {room.shareBoard.length > 0 ? (

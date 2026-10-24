@@ -28,7 +28,15 @@ export function CharacterPortrait({
       onError={() => {
         if (src !== fallback) setBroken(true);
       }}
-      style={{ width: "100%", height: "100%", objectFit: "cover", objectPosition: "center top", display: "block" }}
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        objectFit: "cover",
+        objectPosition: "center 18%",
+        display: "block",
+      }}
     />
   );
 }
@@ -99,7 +107,14 @@ export function CharacterPickCard({
         cursor: locked ? "not-allowed" : "pointer",
       }}
     >
-      <div style={{ position: "relative", height: 188, background: "#14110e" }}>
+      <div
+        style={{
+          position: "relative",
+          height: 168,
+          overflow: "hidden",
+          background: "#14110e",
+        }}
+      >
         <CharacterPortrait url={character.portraitUrl} gender={character.gender} />
         {selected || locked ? (
           <span
