@@ -17,16 +17,40 @@ export type HostMsg =
   | { t: "snapshot"; room: TurnSnapshot }
   | { t: "actionResult"; ok: boolean; error?: string };
 
-/** Pure PeerJS defaults. Custom ICE was dropping the broker socket. */
+/**
+ * PeerJS cloud TURN is flaky from mobile. Keep their relays and add Open Relay
+ * (ports 80/443, TCP) so a phone behind CGNAT still has a path.
+ */
 const PEER_OPTS = {
   debug: 1 as const,
   host: "0.peerjs.com",
   port: 443,
   path: "/",
   secure: true,
+  config: {
+    iceServers: [
+      { urls: "stun:stun.l.google.com:19302" },
+      { urls: "stun:stun1.l.google.com:19302" },
+      {
+        urls: ["turn:eu-0.turn.peerjs.com:3478", "turn:us-0.turn.peerjs.com:3478"],
+        username: "peerjs",
+        credential: "peerjsp",
+      },
+      {
+        urls: [
+          "turn:openrelay.metered.ca:80",
+          "turn:openrelay.metered.ca:443",
+          "turn:openrelay.metered.ca:443?transport=tcp",
+          "turns:openrelay.metered.ca:443",
+        ],
+        username: "openrelayproject",
+        credential: "openrelayproject",
+      },
+    ],
+  },
 };
 
-const CONNECT_OPTS = { serialization: "json" as const };
+const CONNECT_OPTS = { serialization: "json" as const, reliable: true };
 
 export function makeHostPeerId(code: string) {
   const suffix = Math.random().toString(36).slice(2, 8);
@@ -57,7 +81,7 @@ export function openHostPeer(
     };
     conn.on("data", handle);
     conn.on("open", () => {
-      /* channel ready */
+      /* channel ready; hello may already be buffered */
     });
   });
   return peer;
@@ -92,8 +116,8 @@ export function openGuestPeer(
         } catch {
           /* */
         }
-        if (attempt < 4) window.setTimeout(tryConnect, 1500);
-      }, 12000);
+        if (attempt < 5) window.setTimeout(tryConnect, 1200);
+      }, 15000);
       conn.on("open", () => {
         if (settled) return;
         settled = true;
@@ -107,9 +131,9 @@ export function openGuestPeer(
       });
       conn.on("error", (e) => {
         onStatus?.(`Ошибка канала: ${String(e)}`);
-        if (!settled && attempt < 4) {
+        if (!settled && attempt < 5) {
           window.clearTimeout(t);
-          window.setTimeout(tryConnect, 1500);
+          window.setTimeout(tryConnect, 1200);
         }
       });
     };

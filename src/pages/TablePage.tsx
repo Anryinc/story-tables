@@ -218,7 +218,7 @@ export function TablePage() {
   }, [code, clientId, pack]);
 
   useEffect(() => {
-    if (!hostPeerId || !code) {
+    if (!peerReady || !hostPeerId || !code) {
       setQr("");
       return;
     }
@@ -229,7 +229,7 @@ export function TablePage() {
       errorCorrectionLevel: "M",
       color: { dark: "#111111", light: "#ffffff" },
     }).then(setQr);
-  }, [hostPeerId, code]);
+  }, [peerReady, hostPeerId, code]);
 
   if (!pack) {
     return (
@@ -326,7 +326,7 @@ export function TablePage() {
               }}
             >
               <p className="muted" style={{ margin: 0, fontSize: 12, lineHeight: 1.4 }}>
-                Собираем QR…
+                {err ? "Канал не поднялся. Обновите стол." : "Ждём сигнал PeerJS…"}
               </p>
             </div>
           )}
