@@ -52,6 +52,7 @@ function pin(
     linkNodeId,
     interaction: "talk",
     percent: true,
+    locked: true,
   };
 }
 

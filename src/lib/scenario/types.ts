@@ -46,6 +46,8 @@ export type SceneObject = {
   interaction?: "none" | "inspect" | "talk";
   /** x/y/w/h are percentages of the scene, not pixels. */
   percent?: boolean;
+  /** Постановка зафиксирована: не двигается и не меняет размер, пока не снимут. */
+  locked?: boolean;
 };
 
 export type TimelineMarker = {

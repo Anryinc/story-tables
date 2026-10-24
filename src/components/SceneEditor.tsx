@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type CSSProperties, type PointerEvent as RE, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type PointerEvent as RE, type ReactNode } from "react";
 import { getLoreBase } from "@/lib/lore/registry";
 import { abilitiesForSequence } from "@/lib/lore/types";
 import { addAssetFromFile, resolveAssetUrl } from "@/lib/assets/store";
@@ -104,20 +104,6 @@ function exitsOf(doc: ScenarioDocument, locId: string) {
   });
 }
 
-function placeBox(x: number, y: number, w: number, h: number, free: boolean) {
-  if (!free) {
-    return {
-      x: Math.max(0, Math.min(100 - w, x)),
-      y: Math.max(0, Math.min(100 - h, y)),
-    };
-  }
-  const keep = 8;
-  return {
-    x: Math.max(keep - w, Math.min(100 - keep, x)),
-    y: Math.max(keep - h, Math.min(100 - keep, y)),
-  };
-}
-
 export function SceneEditor({
   doc,
   locationId,
@@ -202,15 +188,12 @@ export function SceneEditor({
     });
   };
 
-  const pointAt = (e: { clientX: number; clientY: number }, clamp: boolean) => {
+  const percentAt = (e: { clientX: number; clientY: number }) => {
     const rect = stageRef.current?.getBoundingClientRect();
-    if (!rect || !rect.width || !rect.height) return null;
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    if (!clamp) return { x, y };
+    if (!rect) return null;
     return {
-      x: Math.min(100, Math.max(0, x)),
-      y: Math.min(100, Math.max(0, y)),
+      x: Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100)),
+      y: Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100)),
     };
   };
 
@@ -314,12 +297,13 @@ export function SceneEditor({
       kind: "npc",
       label: child.data.npcName,
       x: Math.max(0, x - 8),
-      y: Math.max(0, y - 20),
+      y: Math.max(0, y - 26),
       w: 16,
       h: 52,
       linkNodeId: child.id,
       interaction: "talk",
       percent: true,
+      locked: true,
     };
     const edge: ScenarioEdge = {
       id: `e_${loc.id}_${child.id}`,
@@ -374,6 +358,7 @@ export function SceneEditor({
       linkNodeId: node.id,
       interaction: node.kind === "npc" ? "talk" : "inspect",
       percent: true,
+      locked: node.kind === "npc",
     };
     patchLoc({ sceneObjects: [...objects, pin] });
     setSel({ kind: node.kind === "npc" ? "npc" : "spark", id: pin.id });
@@ -401,7 +386,7 @@ export function SceneEditor({
   const onStageDown = (e: RE) => {
     if (e.target !== stageRef.current) return;
     if (!editing) return;
-    const p = pointAt(e, true);
+    const p = percentAt(e);
     if (!p) return;
     if (tool === "spark") addSpark(p.x, p.y);
     else if (tool === "item") addItem(p.x, p.y);
@@ -413,41 +398,50 @@ export function SceneEditor({
     if (!editing) return;
     e.stopPropagation();
     setSel({ kind: o.kind === "npc" || o.interaction === "talk" ? "npc" : "spark", id: o.id });
-    const p = pointAt(e, false);
+    if (o.locked) return;
+    const p = percentAt(e);
     if (!p) return;
     drag.current = { id: o.id, ox: p.x - o.x, oy: p.y - o.y };
     (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
   };
 
   const onMove = (e: RE) => {
-    const p = pointAt(e, false);
+    const p = percentAt(e);
     if (!p) return;
     if (resize.current) {
       const r = resize.current;
-      const obj = objects.find((item) => item.id === r.id);
-      const free = obj?.kind === "npc" || obj?.interaction === "talk";
       const rawW = Math.max(4, Math.abs(p.x - r.ax));
       const rawH = Math.max(4, Math.abs(p.y - r.ay));
-      const cap = free ? 240 : 90;
-      let scale = Math.max(rawW / r.startW, rawH / r.startH, 0.25);
-      scale = Math.min(scale, cap / r.startW, cap / r.startH);
-      const w = Math.max(6, r.startW * scale);
-      const h = Math.max(6, w / r.aspect);
+      const scale = Math.max(rawW / r.startW, rawH / r.startH, 0.25);
+      const w = Math.min(90, Math.max(6, r.startW * scale));
+      const h = Math.min(90, Math.max(6, w / r.aspect));
       const x = r.corner.includes("e") ? r.ax : r.ax - w;
       const y = r.corner.includes("s") ? r.ay : r.ay - h;
-      patchObject(r.id, { ...placeBox(x, y, w, h, free), w, h });
+      patchObject(r.id, {
+        x: Math.max(0, Math.min(100 - w, x)),
+        y: Math.max(0, Math.min(100 - h, y)),
+        w,
+        h,
+      });
       return;
     }
     if (!drag.current) return;
     const d = drag.current;
-    const obj = objects.find((item) => item.id === d.id);
-    const free = obj?.kind === "npc" || obj?.interaction === "talk";
-    patchObject(d.id, placeBox(p.x - d.ox, p.y - d.oy, obj?.w ?? 10, obj?.h ?? 10, free));
+    patchObject(d.id, {
+      x: Math.min(96, Math.max(0, p.x - d.ox)),
+      y: Math.min(96, Math.max(0, p.y - d.oy)),
+    });
   };
 
   const onUp = () => {
+    const moved = drag.current ?? resize.current;
     drag.current = null;
     resize.current = null;
+    if (!moved) return;
+    const pin = objects.find((o) => o.id === moved.id);
+    if (pin && (pin.kind === "npc" || pin.interaction === "talk") && !pin.locked) {
+      patchObject(pin.id, { locked: true });
+    }
   };
 
   useEffect(() => {
@@ -598,85 +592,94 @@ export function SceneEditor({
               }
             };
             if (isNpc) {
-              const visL = Math.max(0, Math.min(100, o.x));
-              const visT = Math.max(0, Math.min(100, o.y));
-              const visR = Math.max(0, Math.min(100, o.x + o.w));
-              const visB = Math.max(0, Math.min(100, o.y + o.h));
               return (
-                <Fragment key={o.id}>
-                  <button
-                    type="button"
-                    onPointerDown={(e) => (editing ? onPinDown(e, o) : onPlayClick(e))}
-                    style={{
-                      position: "absolute",
-                      left: `${o.x}%`,
-                      top: `${o.y}%`,
-                      width: `${o.w}%`,
-                      height: `${o.h}%`,
-                      padding: 0,
-                      border: editing && active ? "1px dashed var(--brass)" : "none",
-                      background: "transparent",
-                      cursor: editing ? "move" : "pointer",
-                      zIndex: 2,
-                    }}
-                  >
-                    {o.url || selectedNodeOf(doc, o)?.data.portraitUrl ? (
-                      <img
-                        src={o.url || selectedNodeOf(doc, o)?.data.portraitUrl}
-                        alt=""
-                        draggable={false}
-                        style={{
-                          width: "100%",
-                          height: "100%",
-                          objectFit: "contain",
-                          objectPosition: "center bottom",
-                          pointerEvents: "none",
-                        }}
-                      />
-                    ) : (
-                      <span className="spark spark-npc" style={{ pointerEvents: "none" }} />
-                    )}
-                  </button>
-                  {editing && active
-                    ? (["nw", "ne", "sw", "se"] as const).map((corner) => {
-                        const hx = corner.includes("w") ? visL : visR;
-                        const hy = corner.includes("n") ? visT : visB;
-                        return (
-                          <span
-                            key={corner}
-                            onPointerDown={(e) => {
-                              e.stopPropagation();
-                              const ax = corner.includes("w") ? o.x + o.w : o.x;
-                              const ay = corner.includes("n") ? o.y + o.h : o.y;
-                              resize.current = {
-                                id: o.id,
-                                corner,
-                                ax,
-                                ay,
-                                startW: Math.max(o.w, 1),
-                                startH: Math.max(o.h, 1),
-                                aspect: Math.max(o.w, 1) / Math.max(o.h, 1),
-                              };
-                              (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-                            }}
-                            style={{
-                              position: "absolute",
-                              left: `${hx}%`,
-                              top: `${hy}%`,
-                              width: 14,
-                              height: 14,
-                              marginLeft: -7,
-                              marginTop: -7,
-                              borderRadius: 2,
-                              background: "var(--brass)",
-                              zIndex: 6,
-                              cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize",
-                            }}
-                          />
-                        );
-                      })
-                    : null}
-                </Fragment>
+                <button
+                  key={o.id}
+                  type="button"
+                  onPointerDown={(e) => (editing ? onPinDown(e, o) : onPlayClick(e))}
+                  style={{
+                    position: "absolute",
+                    left: `${o.x}%`,
+                    top: `${o.y}%`,
+                    width: `${o.w}%`,
+                    height: `${o.h}%`,
+                    padding: 0,
+                    border: editing && active ? "1px dashed var(--brass)" : "none",
+                    background: "transparent",
+                    cursor: editing ? "move" : "pointer",
+                  }}
+                >
+                  {o.url || selectedNodeOf(doc, o)?.data.portraitUrl ? (
+                    <img
+                      src={o.url || selectedNodeOf(doc, o)?.data.portraitUrl}
+                      alt=""
+                      draggable={false}
+                      style={{
+                        width: "100%",
+                        height: "100%",
+                        objectFit: "contain",
+                        objectPosition: "center bottom",
+                        pointerEvents: "none",
+                        filter: "drop-shadow(0 10px 8px rgba(0,0,0,0.55)) drop-shadow(0 2px 2px rgba(0,0,0,0.4))",
+                      }}
+                    />
+                  ) : (
+                    <span className="spark spark-npc" style={{ pointerEvents: "none" }} />
+                  )}
+                  {editing ? (
+                    <span
+                      style={{
+                        position: "absolute",
+                        left: 0,
+                        right: 0,
+                        bottom: 0,
+                        fontSize: 10,
+                        color: "var(--paper)",
+                        background: "rgba(12,11,10,0.7)",
+                        pointerEvents: "none",
+                      }}
+                    >
+                      {o.label}
+                    </span>
+                  ) : null}
+                  {editing && active ? (
+                    <>
+                      {(["nw", "ne", "sw", "se"] as const).map((corner) => (
+                        <span
+                          key={corner}
+                          onPointerDown={(e) => {
+                            if (o.locked) return;
+                            e.stopPropagation();
+                            const p = percentAt(e);
+                            if (!p) return;
+                            const ax = corner.includes("w") ? o.x + o.w : o.x;
+                            const ay = corner.includes("n") ? o.y + o.h : o.y;
+                            resize.current = {
+                              id: o.id,
+                              corner,
+                              ax,
+                              ay,
+                              startW: Math.max(o.w, 1),
+                              startH: Math.max(o.h, 1),
+                              aspect: Math.max(o.w, 1) / Math.max(o.h, 1),
+                            };
+                            (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+                          }}
+                          style={{
+                            position: "absolute",
+                            width: 12,
+                            height: 12,
+                            borderRadius: 2,
+                            background: "var(--brass)",
+                            cursor: corner === "nw" || corner === "se" ? "nwse-resize" : "nesw-resize",
+                            ...(corner.includes("n") ? { top: -4 } : { bottom: -4 }),
+                            ...(corner.includes("w") ? { left: -4 } : { right: -4 }),
+                          }}
+                        />
+                      ))}
+                    </>
+                  ) : null}
+                </button>
               );
             }
             const cx = o.x + o.w / 2;
@@ -1511,6 +1514,30 @@ function NpcInspector({
             }}
           />
         </label>
+      </Section>
+      <Section title="Постановка">
+        <label className="muted" style={{ fontSize: 12, display: "block" }}>
+          <input
+            type="checkbox"
+            checked={Boolean(pin.locked)}
+            onChange={(e) => onPin({ locked: e.target.checked })}
+          />{" "}
+          Зафиксировать размер и место
+        </label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6, marginTop: 8 }}>
+          {(["x", "y", "w", "h"] as const).map((key) => (
+            <label key={key} className="muted" style={{ fontSize: 11 }}>
+              {key.toUpperCase()}
+              <input
+                type="number"
+                value={Math.round(pin[key] * 10) / 10}
+                disabled={Boolean(pin.locked)}
+                onChange={(e) => onPin({ [key]: Number(e.target.value) })}
+                style={field}
+              />
+            </label>
+          ))}
+        </div>
       </Section>
       {base ? (
         <Section title="Путь и зелье">

@@ -84,6 +84,7 @@ export function LocationScene({
                     objectPosition: "center bottom",
                     display: "block",
                     pointerEvents: "none",
+                    filter: "drop-shadow(0 10px 8px rgba(0,0,0,0.55)) drop-shadow(0 2px 2px rgba(0,0,0,0.4))",
                   }}
                 />
               ) : null}
