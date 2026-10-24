@@ -53,7 +53,7 @@ export function LocationScene({
           {title}
         </div>
       ) : null}
-      {pins.map((pin, index) => {
+      {pins.map((pin) => {
         if (pin.kind === "npc") {
           return (
             <button
@@ -77,7 +77,6 @@ export function LocationScene({
                 <img
                   src={pin.image}
                   alt=""
-                  className="npc-idle"
                   style={{
                     width: "100%",
                     height: "100%",
@@ -85,8 +84,6 @@ export function LocationScene({
                     objectPosition: "center bottom",
                     display: "block",
                     pointerEvents: "none",
-                    animationDuration: `${3.2 + (index % 4) * 0.45}s`,
-                    animationDelay: `${(index % 5) * -0.7}s`,
                   }}
                 />
               ) : null}

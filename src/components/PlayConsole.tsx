@@ -484,14 +484,12 @@ export function PlayConsole({
                 <img
                   src={npc.image}
                   alt=""
-                  className="npc-idle"
                   style={{
                     width: 108,
                     height: 180,
                     objectFit: "contain",
                     objectPosition: "center bottom",
                     flex: "0 0 auto",
-                    animationDuration: "3.4s",
                   }}
                 />
               ) : null}

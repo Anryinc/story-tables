@@ -26,14 +26,12 @@ export function PopupModal({
               <img
                 src={popup.imageUrl}
                 alt=""
-                className="npc-idle"
                 style={{
                   width: 108,
                   height: 180,
                   objectFit: "contain",
                   objectPosition: "center bottom",
                   flex: "0 0 auto",
-                  animationDuration: "3.2s",
                 }}
               />
             ) : null}

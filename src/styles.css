@@ -86,71 +86,10 @@ button {
   height: 14px;
   border-radius: 99px;
   background: #f3ebe0;
-  box-shadow: 0 0 0 0 rgba(243, 235, 224, 0.7);
-  animation: spark 1.5s ease-in-out infinite;
+  box-shadow: 0 0 8px 2px rgba(243, 235, 224, 0.35);
 }
 
 .spark-npc {
   background: #c4a574;
-  box-shadow: 0 0 0 0 rgba(196, 165, 116, 0.75);
-}
-
-@keyframes spark {
-  0%,
-  100% {
-    transform: scale(0.75);
-    box-shadow: 0 0 0 0 rgba(243, 235, 224, 0.15);
-  }
-  50% {
-    transform: scale(1.15);
-    box-shadow: 0 0 12px 6px rgba(243, 235, 224, 0.45);
-  }
-}
-
-@keyframes npc-idle {
-  0%,
-  100% {
-    transform: translateY(0) rotate(0deg);
-  }
-  40% {
-    transform: translateY(-1.2%) rotate(-0.45deg);
-  }
-  70% {
-    transform: translateY(0.4%) rotate(0.35deg);
-  }
-}
-
-.npc-idle {
-  transform-origin: 50% 100%;
-  animation: npc-idle 3.8s ease-in-out infinite;
-}
-
-@keyframes dlg-in {
-  from {
-    transform: translateY(28px);
-    opacity: 0;
-  }
-  to {
-    transform: none;
-    opacity: 1;
-  }
-}
-
-.dlg-sheet {
-  animation: dlg-in 0.32s ease-out;
-}
-
-@keyframes dlg-line {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-
-.dlg-line {
-  animation: dlg-line 0.4s ease-out;
+  box-shadow: 0 0 8px 2px rgba(196, 165, 116, 0.4);
 }
